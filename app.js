@@ -300,10 +300,10 @@ function renderHome() {
               `,
             )
             .join("")}
-          <button class="center-control" id="centerControl" type="button" aria-label="1Mail Today">
+          <button class="center-control" id="centerControl" type="button" aria-label="1Mail AI">
             <span class="center-mark">
-              <strong id="centerLabel">1Mail</strong>
-              <span id="centerHint">Swipe to choose money, time, risk, and mail</span>
+              <strong id="centerLabel">1Mail AI</strong>
+              <span id="centerHint">Ask anything about your mailbox</span>
             </span>
           </button>
         </div>
@@ -334,6 +334,12 @@ function renderHome() {
       return;
     }
     openRoute("today");
+  });
+  center.addEventListener("pointerenter", () => {
+    if (!dragState) setWheelFocus(null);
+  });
+  center.addEventListener("focus", () => {
+    if (!dragState) setWheelFocus(null);
   });
 
   document.querySelectorAll("[data-module]").forEach((node) => {
@@ -588,9 +594,9 @@ function setWheelFocus(moduleId, mode = "idle") {
       node.classList.remove("is-target");
     });
     center.style.removeProperty("--focus-color");
-    label.textContent = "1Mail";
+    label.textContent = "1Mail AI";
     label.style.removeProperty("--label-size");
-    hint.textContent = "Swipe to choose money, time, risk, and mail";
+    hint.textContent = "Ask anything about your mailbox";
     return;
   }
 
