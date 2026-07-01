@@ -26,7 +26,7 @@ const icons = {
   repeat:
     '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="m7 22-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>',
   stopHand:
-    '<svg class="icon stop-hand-icon" viewBox="0 0 24 24" aria-hidden="true"><circle class="stop-sign" cx="12" cy="12" r="9"/><path class="stop-sign" d="m5.6 18.4 12.8-12.8"/><path class="stop-palm" d="M8.8 13.2V9.4a1.1 1.1 0 0 1 2.2 0v3.3"/><path class="stop-palm" d="M11 12.5V8.2a1.1 1.1 0 0 1 2.2 0v4.3"/><path class="stop-palm" d="M13.2 12.7V9.1a1.1 1.1 0 0 1 2.2 0v4.8"/><path class="stop-palm" d="M15.4 13.9v-2.3a1.1 1.1 0 0 1 2.2 0v3.2c0 2.5-1.7 4.4-4.3 4.4h-1.1c-1.7 0-2.8-.7-3.8-2l-1.1-1.5a1.1 1.1 0 0 1 1.7-1.4l1.2 1.1"/></svg>',
+    '<img class="stop-hand-icon" src="./assets/stop-unsubscribe.png" alt="" aria-hidden="true" />',
   inbox:
     '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="m5.5 5.1-3.2 7.4A2 2 0 0 0 4.1 15H20a2 2 0 0 0 1.8-2.8l-3.3-7.1A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1Z"/></svg>',
   mail:
@@ -542,6 +542,7 @@ let nextAiActionId = 1;
 const pendingAiActions = {};
 let inboxBookmarkDrag = null;
 let suppressInboxBookmarkClick = false;
+let gmailConnectStatus = "";
 
 function render() {
   if (route === "home") {
@@ -561,6 +562,7 @@ function render() {
 
 function renderHome() {
   const sliceAngle = 360 / modules.length;
+  const mailboxAvatar = getMailboxAvatar();
   app.innerHTML = `
     <div class="view home-view">
       <header class="topbar">
@@ -572,7 +574,16 @@ function renderHome() {
             <span class="sr-only">App settings</span>
           </button>
         </div>
-        <button class="icon-button" type="button" data-open="settings" aria-label="Settings">${icons.settings}</button>
+        <button
+          class="mailbox-profile-button"
+          type="button"
+          data-open="settings"
+          aria-label="Current mailbox: ${escapeAttribute(mailboxAvatar.email)}. Open settings."
+          title="${escapeAttribute(mailboxAvatar.email)}"
+          style="--mailbox-color: ${mailboxAvatar.color}"
+        >
+          ${mailboxAvatar.initial}
+        </button>
       </header>
 
       <div class="hub-stage" id="hubStage">
@@ -696,6 +707,31 @@ function renderInboxBookmark() {
       </section>
     </footer>
   `;
+}
+
+function getMailboxAvatar() {
+  const profile = getStoredGmailProfile();
+  const email = profile?.emailAddress || "alex@example.com";
+  return {
+    color: getMailboxColor(email),
+    email,
+    initial: getMailboxInitial(email),
+  };
+}
+
+function getMailboxInitial(email = "") {
+  const localPart = email.split("@")[0] || email;
+  const firstLetter = localPart.match(/[a-z0-9]/i)?.[0] || "1";
+  return firstLetter.toUpperCase();
+}
+
+function getMailboxColor(email = "") {
+  const palette = ["#2458ff", "#0d8a61", "#d64242", "#6b4be8", "#b87506", "#28725a"];
+  let hash = 0;
+  for (const character of email) {
+    hash = (hash * 31 + character.charCodeAt(0)) % palette.length;
+  }
+  return palette[hash];
 }
 
 function getInboxBookmarkPrompt() {
@@ -1068,6 +1104,8 @@ function renderSettingsPage() {
       </section>
 
       <section class="settings-scroll">
+        ${renderGmailConnectPanel()}
+
         ${settingsGroups
           .map(
             (group) => `
@@ -1109,6 +1147,10 @@ function renderSettingsPage() {
   `;
 
   document.querySelector("[data-back]").addEventListener("click", () => openRoute("home"));
+  const gmailButton = document.querySelector("[data-gmail-connect]");
+  if (gmailButton) {
+    gmailButton.addEventListener("click", startGmailOAuth);
+  }
   document.querySelector(".feedback-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const input = document.querySelector("#feedbackInput");
@@ -1120,6 +1162,31 @@ function renderSettingsPage() {
     input.value = "";
     status.textContent = "Sent. Thank you. This is exactly how 1Mail gets kinder.";
   });
+}
+
+function renderGmailConnectPanel() {
+  const config = getGmailConfig();
+  const profile = getStoredGmailProfile();
+  const isConfigured = isGmailConfigured(config);
+  const status = gmailConnectStatus || (profile ? `Connected as ${profile.emailAddress}` : "Gmail is not connected yet.");
+  const buttonLabel = profile ? "Reconnect Gmail" : "Connect Gmail";
+  const detail = isConfigured
+    ? "Uses Google OAuth with read-only Gmail access for prototype testing."
+    : "Add your Google iOS OAuth client ID in oauth-config.js before testing on iPhone.";
+
+  return `
+    <section class="gmail-connect-card">
+      <span class="gmail-connect-icon">${icons.mail}</span>
+      <span class="gmail-connect-copy">
+        <strong>Gmail test connection</strong>
+        <span>${detail}</span>
+        <em role="status" aria-live="polite">${status}</em>
+      </span>
+      <button class="gmail-connect-button" type="button" data-gmail-connect ${isConfigured ? "" : "disabled"}>
+        ${buttonLabel}
+      </button>
+    </section>
+  `;
 }
 
 function renderAiPage() {
@@ -1838,4 +1905,193 @@ function vibrate(ms) {
   }
 }
 
+function getGmailConfig() {
+  return window.ONE_MAIL_CONFIG?.gmail || {};
+}
+
+function isGmailConfigured(config = getGmailConfig()) {
+  return Boolean(
+    config.clientId &&
+      config.redirectUri &&
+      !config.clientId.includes("PASTE_IOS_CLIENT_ID") &&
+      !config.redirectUri.includes("PASTE_IOS_CLIENT_ID"),
+  );
+}
+
+function getStoredGmailProfile() {
+  try {
+    return JSON.parse(localStorage.getItem("oneMailGmailProfile") || "null");
+  } catch {
+    return null;
+  }
+}
+
+function setGmailConnectStatus(message) {
+  gmailConnectStatus = message;
+  const status = document.querySelector(".gmail-connect-copy em");
+  if (status) status.textContent = message;
+}
+
+async function startGmailOAuth() {
+  const config = getGmailConfig();
+  if (!isGmailConfigured(config)) {
+    setGmailConnectStatus("Add the Gmail iOS OAuth client ID first.");
+    return;
+  }
+
+  try {
+    const state = createOAuthRandomString(24);
+    const codeVerifier = createOAuthRandomString(64);
+    const codeChallenge = await createCodeChallenge(codeVerifier);
+    localStorage.setItem(
+      "oneMailGmailOAuthPending",
+      JSON.stringify({ codeVerifier, state, createdAt: Date.now() }),
+    );
+
+    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    authUrl.search = new URLSearchParams({
+      access_type: "offline",
+      client_id: config.clientId,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
+      prompt: "consent",
+      redirect_uri: config.redirectUri,
+      response_type: "code",
+      scope: (config.scopes || []).join(" "),
+      state,
+    }).toString();
+
+    setGmailConnectStatus("Opening Google sign-in...");
+    const Browser = window.Capacitor?.Plugins?.Browser;
+    if (Browser?.open) {
+      await Browser.open({ url: authUrl.toString() });
+      return;
+    }
+    window.location.href = authUrl.toString();
+  } catch (error) {
+    setGmailConnectStatus(`Could not start Gmail sign-in: ${error.message}`);
+  }
+}
+
+function setupGmailOAuthRedirectListener() {
+  const App = window.Capacitor?.Plugins?.App;
+  if (App?.addListener) {
+    App.addListener("appUrlOpen", ({ url }) => handleGmailOAuthRedirect(url));
+  }
+  handleGmailOAuthRedirect(window.location.href);
+}
+
+async function handleGmailOAuthRedirect(callbackUrl) {
+  if (!callbackUrl || !callbackUrl.includes("oauth2redirect")) return;
+
+  let url;
+  try {
+    url = new URL(callbackUrl);
+  } catch {
+    return;
+  }
+
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+  const error = url.searchParams.get("error");
+  if (error) {
+    setGmailConnectStatus(`Google sign-in stopped: ${error}`);
+    return;
+  }
+  if (!code) return;
+
+  const pending = getPendingGmailOAuth();
+  if (!pending || pending.state !== state) {
+    setGmailConnectStatus("Google sign-in could not be verified. Please try again.");
+    return;
+  }
+
+  try {
+    setGmailConnectStatus("Connecting Gmail...");
+    const token = await exchangeGmailAuthCode(code, pending.codeVerifier);
+    localStorage.removeItem("oneMailGmailOAuthPending");
+    localStorage.setItem(
+      "oneMailGmailToken",
+      JSON.stringify({
+        accessToken: token.access_token,
+        expiresAt: Date.now() + Number(token.expires_in || 3600) * 1000,
+        refreshToken: token.refresh_token || null,
+        scope: token.scope || "",
+        tokenType: token.token_type || "Bearer",
+      }),
+    );
+    const profile = await fetchGmailProfile(token.access_token);
+    localStorage.setItem("oneMailGmailProfile", JSON.stringify(profile));
+    setGmailConnectStatus(`Connected as ${profile.emailAddress}`);
+    if (route === "settings") renderSettingsPage();
+  } catch (exchangeError) {
+    setGmailConnectStatus(`Gmail connection failed: ${exchangeError.message}`);
+  }
+}
+
+function getPendingGmailOAuth() {
+  try {
+    return JSON.parse(localStorage.getItem("oneMailGmailOAuthPending") || "null");
+  } catch {
+    return null;
+  }
+}
+
+async function exchangeGmailAuthCode(code, codeVerifier) {
+  const config = getGmailConfig();
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: config.clientId,
+      code,
+      code_verifier: codeVerifier,
+      grant_type: "authorization_code",
+      redirect_uri: config.redirectUri,
+    }),
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body.error_description || body.error || "Token exchange failed");
+  }
+  return body;
+}
+
+async function fetchGmailProfile(accessToken) {
+  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body.error?.message || "Could not read Gmail profile");
+  }
+  return {
+    emailAddress: body.emailAddress,
+    messagesTotal: body.messagesTotal,
+    threadsTotal: body.threadsTotal,
+    connectedAt: new Date().toISOString(),
+  };
+}
+
+function createOAuthRandomString(length) {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return base64Url(bytes);
+}
+
+async function createCodeChallenge(codeVerifier) {
+  const bytes = new TextEncoder().encode(codeVerifier);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return base64Url(new Uint8Array(digest));
+}
+
+function base64Url(bytes) {
+  let value = "";
+  bytes.forEach((byte) => {
+    value += String.fromCharCode(byte);
+  });
+  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+setupGmailOAuthRedirectListener();
 render();

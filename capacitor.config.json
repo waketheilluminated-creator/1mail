@@ -1,0 +1,8 @@
+{
+  "appId": "com.onemail.prototype",
+  "appName": "1Mail",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "always"
+  }
+}

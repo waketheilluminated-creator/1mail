@@ -152,7 +152,7 @@ p {
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  width: 70px;
+  width: 46px;
   min-height: 32px;
   margin-top: 2px;
   padding: 0;
@@ -163,12 +163,12 @@ p {
 .title-menu-lines {
   display: grid;
   gap: 5px;
-  width: 60px;
+  width: 40px;
 }
 
 .title-menu-lines span {
   display: block;
-  width: 60px;
+  width: 40px;
   height: 3px;
   border-radius: 999px;
   background: currentColor;
@@ -188,6 +188,26 @@ p {
   box-shadow: inset 0 0 0 1px var(--line);
 }
 
+.mailbox-profile-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--mailbox-color, var(--ink));
+  color: #ffffff;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.42),
+    0 10px 24px rgba(18, 22, 19, 0.1);
+  font-size: 18px;
+  font-weight: 820;
+  line-height: 1;
+}
+
+.mailbox-profile-button:active {
+  transform: scale(0.96);
+}
+
 .icon-button:active {
   transform: scale(0.96);
 }
@@ -202,19 +222,14 @@ p {
   fill: none;
 }
 
-.stop-hand-icon .stop-sign {
-  stroke: var(--red);
-  stroke-width: 2.4;
-}
-
-.stop-hand-icon .stop-palm {
-  stroke: var(--ink);
-  stroke-width: 2.1;
+.stop-hand-icon {
+  display: block;
+  object-fit: contain;
 }
 
 .item-icon .stop-hand-icon {
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
 }
 
 .hub-stage {
@@ -692,6 +707,66 @@ p {
   min-height: 0;
   padding-bottom: 4px;
   overflow: auto;
+}
+
+.gmail-connect-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.gmail-connect-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(23, 23, 23, 0.06);
+  color: var(--ink);
+}
+
+.gmail-connect-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.gmail-connect-copy strong {
+  font-size: 14px;
+}
+
+.gmail-connect-copy span,
+.gmail-connect-copy em {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.34;
+}
+
+.gmail-connect-copy em {
+  color: var(--green);
+  font-weight: 740;
+}
+
+.gmail-connect-button {
+  grid-column: 1 / -1;
+  min-height: 42px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.gmail-connect-button:disabled {
+  background: rgba(23, 23, 23, 0.08);
+  color: var(--muted);
 }
 
 .settings-group {
@@ -1235,8 +1310,8 @@ p {
 }
 
 .subscription-stop-button .stop-hand-icon {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
 }
 
 .subscription-stop-button:active {
@@ -1249,13 +1324,7 @@ p {
 }
 
 .subscription-item.is-unsubscribed .subscription-stop-button {
-  background: var(--red);
-  color: #ffffff;
-}
-
-.subscription-item.is-unsubscribed .stop-hand-icon .stop-sign,
-.subscription-item.is-unsubscribed .stop-hand-icon .stop-palm {
-  stroke: currentColor;
+  box-shadow: inset 0 0 0 2px rgba(13, 138, 97, 0.2);
 }
 
 .subscription-unsub-result {
