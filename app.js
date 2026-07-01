@@ -159,9 +159,9 @@ const pages = {
       },
       {
         meetingItems: [
-          ["maya", "Fri Jun 30, 9:30 AM", "#2458ff"],
-          ["design.team", "Mon Jul 3, 11:00 AM", "#2458ff"],
-          ["sam", "Tue Jul 4, 2:00 PM", "#2458ff"],
+          ["maya@northstar.studio", "Fri Jun 30, 9:30 AM", "#2458ff"],
+          ["design.team@luma-labs.ai", "Mon Jul 3, 11:00 AM", "#2458ff"],
+          ["sam@foundry.ventures", "Tue Jul 4, 2:00 PM", "#2458ff"],
         ],
       },
     ],
@@ -1325,7 +1325,6 @@ function renderPage(id) {
       ${id === "security" ? renderRisk(page) : renderMetric(page, color, metric)}
       ${renderTabs(id, page.pills)}
       ${id === "today" ? renderTodayContent(tabView) : id === "bills" ? renderBillItems(items) : timeline ? renderTimeline(timeline) : renderItems(items)}
-      ${renderActions(page.actions)}
     </div>
   `;
 
@@ -1410,7 +1409,9 @@ function renderTodayContent(tabView = {}) {
   if (tabView.summary) {
     return `
       <section class="today-summary-card">
-        <p>${tabView.summary.join(" ")}</p>
+        <ul class="today-summary-list">
+          ${tabView.summary.map((item) => `<li>${item}</li>`).join("")}
+        </ul>
       </section>
     `;
   }
@@ -1433,9 +1434,17 @@ function renderReminderItems(items = []) {
         .map(
           ([icon, title, subtitle, side, color]) => `
             <article class="item reminder-item" style="--item-color: ${color}">
-              <button class="reminder-bell-button" type="button" aria-label="Set reminder for ${title}" aria-pressed="false">${icons[icon]}</button>
+              <button
+                class="reminder-bell-button"
+                type="button"
+                aria-label="Set reminder for ${title}"
+                aria-pressed="false"
+                data-calendar-title="${escapeAttribute(title)}"
+                data-calendar-time="${escapeAttribute(subtitle)}"
+              >${icons[icon]}</button>
               <span class="item-main"><strong>${title}</strong><span>${subtitle}</span></span>
               ${side ? `<span class="item-side">${side}</span>` : ""}
+              <p class="reminder-calendar-status" role="status" aria-live="polite"></p>
             </article>
           `,
         )
@@ -1447,11 +1456,134 @@ function renderReminderItems(items = []) {
 function setupReminderButtons() {
   document.querySelectorAll(".reminder-bell-button").forEach((button) => {
     button.addEventListener("click", () => {
-      const isSet = button.getAttribute("aria-pressed") === "true";
-      button.setAttribute("aria-pressed", String(!isSet));
-      button.classList.toggle("is-set", !isSet);
+      const title = button.dataset.calendarTitle;
+      const time = button.dataset.calendarTime;
+      button.setAttribute("aria-pressed", "true");
+      button.classList.add("is-set");
+      createAppleCalendarHandoff(title, time);
+      const status = button.closest(".reminder-item")?.querySelector(".reminder-calendar-status");
+      if (status) status.textContent = "Apple Calendar reminder ready.";
     });
   });
+}
+
+function createAppleCalendarHandoff(title, time) {
+  const start = getCalendarStart(title, time);
+  const end = addMinutesToIcsDate(start, 30);
+  const uid = `${slugify(`${title}-${time}`)}-${Date.now()}@1mail.local`;
+  const calendar = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//1Mail//Mailbox Reminder Prototype//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTAMP:${formatIcsUtcDate(new Date())}`,
+    `DTSTART:${start}`,
+    `DTEND:${end}`,
+    `SUMMARY:${escapeIcsText(title)}`,
+    `DESCRIPTION:${escapeIcsText(`Created from 1Mail. Original email time: ${time}`)}`,
+    "BEGIN:VALARM",
+    "TRIGGER:-PT30M",
+    "ACTION:DISPLAY",
+    `DESCRIPTION:${escapeIcsText(`Reminder: ${title}`)}`,
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  const blob = new Blob([calendar], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${slugify(title)}.ics`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function getCalendarStart(title, time) {
+  const knownStarts = {
+    "Dentist appointment": "20260702T150000",
+    "Flight check-in window": "20260706T074500",
+    "Rental car pickup": "20260708T100000",
+    "maya@northstar.studio": "20260630T093000",
+    "design.team@luma-labs.ai": "20260703T110000",
+    "sam@foundry.ventures": "20260704T140000",
+  };
+  if (knownStarts[title]) return knownStarts[title];
+
+  const fallback = new Date();
+  fallback.setDate(fallback.getDate() + 1);
+  fallback.setHours(9, 0, 0, 0);
+  return formatIcsLocalDate(fallback);
+}
+
+function addMinutesToIcsDate(value, minutes) {
+  const date = new Date(
+    Number(value.slice(0, 4)),
+    Number(value.slice(4, 6)) - 1,
+    Number(value.slice(6, 8)),
+    Number(value.slice(9, 11)),
+    Number(value.slice(11, 13)),
+    Number(value.slice(13, 15)),
+  );
+  date.setMinutes(date.getMinutes() + minutes);
+  return formatIcsLocalDate(date);
+}
+
+function formatIcsLocalDate(date) {
+  return [
+    date.getFullYear(),
+    padDatePart(date.getMonth() + 1),
+    padDatePart(date.getDate()),
+    "T",
+    padDatePart(date.getHours()),
+    padDatePart(date.getMinutes()),
+    padDatePart(date.getSeconds()),
+  ].join("");
+}
+
+function formatIcsUtcDate(date) {
+  return [
+    date.getUTCFullYear(),
+    padDatePart(date.getUTCMonth() + 1),
+    padDatePart(date.getUTCDate()),
+    "T",
+    padDatePart(date.getUTCHours()),
+    padDatePart(date.getUTCMinutes()),
+    padDatePart(date.getUTCSeconds()),
+    "Z",
+  ].join("");
+}
+
+function padDatePart(value) {
+  return String(value).padStart(2, "0");
+}
+
+function escapeIcsText(value = "") {
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\n/g, "\\n");
+}
+
+function slugify(value = "") {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "") || "1mail-reminder";
+}
+
+function escapeAttribute(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function getBillGuideId(title) {

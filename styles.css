@@ -1101,11 +1101,23 @@ p {
   background: rgba(255, 255, 255, 0.78);
 }
 
-.today-summary-card p {
-  color: var(--ink);
+.today-summary-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
   font-size: 15px;
-  font-weight: 690;
-  line-height: 1.45;
+  font-weight: 520;
+  line-height: 1.42;
+}
+
+.today-summary-list li {
+  padding-left: 2px;
+}
+
+.today-summary-list li::marker {
+  color: var(--muted);
 }
 
 .item {
@@ -1191,6 +1203,14 @@ p {
 .reminder-bell-button.is-set {
   background: var(--item-color, var(--blue));
   color: #ffffff;
+}
+
+.reminder-calendar-status {
+  grid-column: 2 / -1;
+  min-height: 14px;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 720;
 }
 
 .bill-stack {
