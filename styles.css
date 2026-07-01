@@ -453,8 +453,8 @@ p {
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 44px;
-  padding: 0 100px 0 20px;
+  min-height: 48px;
+  padding: 6px 128px 6px 20px;
   overflow: visible;
   border: 1px solid rgba(23, 23, 23, 0.08);
   border-bottom: 0;
@@ -588,13 +588,16 @@ p {
 }
 
 .bookmark-copy strong {
+  display: -webkit-box;
   max-width: 100%;
   overflow: hidden;
-  font-size: 14.5px;
+  font-size: 12.2px;
   font-weight: 820;
-  line-height: 1.08;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.14;
+  text-overflow: clip;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .today-button {
@@ -1211,6 +1214,88 @@ p {
   color: var(--green);
   font-size: 11px;
   font-weight: 720;
+}
+
+.subscription-stack {
+  gap: 9px;
+}
+
+.subscription-item {
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+}
+
+.subscription-stop-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--red) 11%, #ffffff);
+  color: var(--red);
+}
+
+.subscription-stop-button .stop-hand-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.subscription-stop-button:active {
+  transform: scale(0.96);
+}
+
+.subscription-stop-button:focus-visible {
+  outline: 2px solid rgba(214, 66, 66, 0.28);
+  outline-offset: 2px;
+}
+
+.subscription-item.is-unsubscribed .subscription-stop-button {
+  background: var(--red);
+  color: #ffffff;
+}
+
+.subscription-item.is-unsubscribed .stop-hand-icon .stop-sign,
+.subscription-item.is-unsubscribed .stop-hand-icon .stop-palm {
+  stroke: currentColor;
+}
+
+.subscription-unsub-result {
+  display: none;
+  grid-column: 1 / -1;
+  gap: 6px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  background: rgba(247, 247, 244, 0.92);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.34;
+}
+
+.subscription-item.has-result .subscription-unsub-result {
+  display: grid;
+}
+
+.subscription-unsub-result strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.subscription-confirm-button {
+  justify-self: start;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.subscription-unsub-link {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.34;
+  overflow-wrap: anywhere;
 }
 
 .bill-stack {

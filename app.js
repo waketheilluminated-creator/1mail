@@ -62,7 +62,7 @@ const modules = [
     wheelColor: "#6f5bb5",
     activeWheelColor: "#8069cf",
     iconColor: "#c9bbff",
-    wheelDescription: "Priority bills, events, risks, and replies",
+    wheelDescription: "Hey what's up, my master?",
   },
   {
     id: "calendar",
@@ -146,7 +146,7 @@ const pages = {
       {
         summary: [
           "5 unread emails need a first look.",
-          "2 real-world events may need reminders.",
+          "2 events may need reminders.",
           "3 unread meeting invites are waiting for a decision.",
         ],
       },
@@ -281,20 +281,50 @@ const pages = {
   },
   subscriptions: {
     eyebrow: "Subscriptions",
-    title: "Subscribed senders",
-    subtitle: "Email addresses and sites",
+    title: "Subscription categories",
+    subtitle: "Email addresses and websites",
     metric: "26",
-    copy: "Let the noise reveal who keeps writing.",
-    pills: ["Senders", "Websites", "Newsletters"],
+    copy: "Let's cut down the noise.",
+    pills: ["Promos", "Newsletter", "Social", "Productivity"],
     actions: [
       ["Keep", "check", "secondary", null],
       ["Block", "ban", "secondary", null],
       ["Unsub", "trash", "", null],
     ],
     items: [
-      ["repeat", "news@medium.com", "medium.com", "Daily", "#6b4be8"],
-      ["repeat", "hello@producthunt.com", "producthunt.com", "Weekly", "#6b4be8"],
-      ["repeat", "offers@airbnb.com", "airbnb.com", "Promo", "#6b4be8"],
+      ["stopHand", "offers@airbnb.com", "airbnb.com", "Promo", "#d64242", "web", "https://www.airbnb.com/account-settings/notifications"],
+      ["stopHand", "deals@spotify.com", "spotify.com", "Promo", "#d64242", "web", "https://www.spotify.com/account/notifications/"],
+      ["stopHand", "sale@uniqlo.com", "uniqlo.com", "Promo", "#d64242", "web", "https://www.uniqlo.com/newsletter/unsubscribe"],
+    ],
+    tabViews: [
+      {
+        items: [
+          ["stopHand", "offers@airbnb.com", "airbnb.com", "Promo", "#d64242", "web", "https://www.airbnb.com/account-settings/notifications"],
+          ["stopHand", "deals@spotify.com", "spotify.com", "Promo", "#d64242", "web", "https://www.spotify.com/account/notifications/"],
+          ["stopHand", "sale@uniqlo.com", "uniqlo.com", "Promo", "#d64242", "web", "https://www.uniqlo.com/newsletter/unsubscribe"],
+        ],
+      },
+      {
+        items: [
+          ["stopHand", "news@medium.com", "medium.com", "Daily", "#d64242", "one-click", ""],
+          ["stopHand", "hello@producthunt.com", "producthunt.com", "Weekly", "#d64242", "one-click", ""],
+          ["stopHand", "digest@substack.com", "substack.com", "Digest", "#d64242", "web", "https://substack.com/settings/notifications"],
+        ],
+      },
+      {
+        items: [
+          ["stopHand", "notifications@linkedin.com", "linkedin.com", "Updates", "#d64242", "web", "https://www.linkedin.com/psettings/email"],
+          ["stopHand", "notify@instagram.com", "instagram.com", "Social", "#d64242", "web", "https://www.instagram.com/emails/settings/"],
+          ["stopHand", "team@discord.com", "discord.com", "Community", "#d64242", "web", "https://discord.com/channels/@me"],
+        ],
+      },
+      {
+        items: [
+          ["stopHand", "updates@notion.so", "notion.so", "Workspace", "#d64242", "one-click", ""],
+          ["stopHand", "tips@figma.com", "figma.com", "Product", "#d64242", "web", "https://www.figma.com/settings"],
+          ["stopHand", "hello@linear.app", "linear.app", "Workflow", "#d64242", "one-click", ""],
+        ],
+      },
     ],
   },
   inbox: {
@@ -646,11 +676,12 @@ function renderHome() {
 }
 
 function renderInboxBookmark() {
+  const bookmarkPrompt = getInboxBookmarkPrompt();
   return `
     <footer class="home-footer">
       <section class="inbox-bookmark" id="inboxBookmark">
         <div class="bookmark-copy">
-          <strong>Inbox is busy, but it can wait.</strong>
+          <strong>${bookmarkPrompt}</strong>
         </div>
         <button class="cat-peek-handle" id="catInboxHandle" type="button" aria-label="Pull up normal inbox">
           <span class="cat-peek" aria-hidden="true">
@@ -665,6 +696,13 @@ function renderInboxBookmark() {
       </section>
     </footer>
   `;
+}
+
+function getInboxBookmarkPrompt() {
+  const unreadCount = Number(pages.today.metric) || 0;
+  if (unreadCount < 5) return "Inbox is quiet, time for some snacks, meow~";
+  if (unreadCount <= 15) return "Inbox is busy, time for a shower, meow~";
+  return "Inbox is hot, time for some attention, meow~";
 }
 
 function setupInboxBookmark() {
@@ -1324,7 +1362,7 @@ function renderPage(id) {
 
       ${id === "security" ? renderRisk(page) : renderMetric(page, color, metric)}
       ${renderTabs(id, page.pills)}
-      ${id === "today" ? renderTodayContent(tabView) : id === "bills" ? renderBillItems(items) : timeline ? renderTimeline(timeline) : renderItems(items)}
+      ${id === "today" ? renderTodayContent(tabView) : id === "bills" ? renderBillItems(items) : id === "subscriptions" ? renderSubscriptionItems(items) : timeline ? renderTimeline(timeline) : renderItems(items)}
     </div>
   `;
 
@@ -1343,6 +1381,9 @@ function renderPage(id) {
   }
   if (id === "today") {
     setupReminderButtons();
+  }
+  if (id === "subscriptions") {
+    setupSubscriptionButtons();
   }
 }
 
@@ -1402,6 +1443,76 @@ function renderItems(items = []) {
         )
         .join("")}
     </section>
+  `;
+}
+
+function renderSubscriptionItems(items = []) {
+  return `
+    <section class="single-stack subscription-stack">
+      ${items
+        .map(
+          ([icon, title, subtitle, side, color, mode, url]) => `
+            <article class="item subscription-item" style="--item-color: ${color}">
+              <button
+                class="subscription-stop-button"
+                type="button"
+                aria-label="Check unsubscribe options for ${title}"
+                aria-expanded="false"
+                data-subscription-source="${escapeAttribute(title)}"
+                data-unsub-mode="${escapeAttribute(mode)}"
+                data-unsub-url="${escapeAttribute(url)}"
+              >${icons[icon]}</button>
+              <span class="item-main"><strong>${title}</strong><span>${subtitle}</span></span>
+              <span class="item-side">${side}</span>
+              <div class="subscription-unsub-result" aria-live="polite"></div>
+            </article>
+          `,
+        )
+        .join("")}
+    </section>
+  `;
+}
+
+function setupSubscriptionButtons() {
+  document.querySelectorAll(".subscription-stop-button").forEach((button) => {
+    button.addEventListener("click", () => showSubscriptionUnsubscribeFlow(button));
+  });
+}
+
+function showSubscriptionUnsubscribeFlow(button) {
+  const item = button.closest(".subscription-item");
+  const result = item?.querySelector(".subscription-unsub-result");
+  if (!item || !result) return;
+
+  const source = button.dataset.subscriptionSource || "this sender";
+  const mode = button.dataset.unsubMode;
+  const url = button.dataset.unsubUrl;
+
+  item.classList.add("has-result");
+  button.setAttribute("aria-expanded", "true");
+
+  if (mode === "one-click") {
+    result.innerHTML = `
+      <strong>Original email checked.</strong>
+      <span>One-click unsubscribe is available for ${source}.</span>
+      <button class="subscription-confirm-button" type="button">One-click unsubscribe</button>
+    `;
+    result.querySelector(".subscription-confirm-button").addEventListener("click", () => {
+      item.classList.add("is-unsubscribed");
+      result.innerHTML = `
+        <strong>Unsubscribe request sent.</strong>
+        <span>Future emails from ${source} will stop when the sender confirms it.</span>
+      `;
+    });
+    return;
+  }
+
+  result.innerHTML = `
+    <strong>Original email checked.</strong>
+    <span>No one-click header found. Use the sender's unsubscribe page.</span>
+    <a class="subscription-unsub-link" href="${escapeAttribute(url)}" target="_blank" rel="noreferrer">
+      ${url}
+    </a>
   `;
 }
 
