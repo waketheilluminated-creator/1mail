@@ -202,6 +202,21 @@ p {
   fill: none;
 }
 
+.stop-hand-icon .stop-sign {
+  stroke: var(--red);
+  stroke-width: 2.4;
+}
+
+.stop-hand-icon .stop-palm {
+  stroke: var(--ink);
+  stroke-width: 2.1;
+}
+
+.item-icon .stop-hand-icon {
+  width: 34px;
+  height: 34px;
+}
+
 .hub-stage {
   position: relative;
   flex: 1;
@@ -447,6 +462,7 @@ p {
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 -18px 42px rgba(18, 22, 19, 0.11);
   pointer-events: auto;
+  touch-action: none;
   transform: translateY(var(--pull-distance, 0));
   transition: box-shadow 180ms ease, transform 180ms ease;
 }
@@ -1136,6 +1152,15 @@ p {
   align-items: center;
 }
 
+.bill-item.is-guide-trigger {
+  cursor: pointer;
+}
+
+.bill-item.is-guide-trigger:focus-visible {
+  outline: 2px solid rgba(23, 23, 23, 0.22);
+  outline-offset: 2px;
+}
+
 .bill-side {
   display: grid;
   justify-items: end;
@@ -1193,18 +1218,36 @@ p {
   text-transform: uppercase;
 }
 
+.bill-guide-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.bill-guide-steps li {
+  padding-left: 2px;
+  color: var(--muted);
+  line-height: 1.38;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .bill-guide-link {
   display: grid;
-  gap: 2px;
+  gap: 4px;
   justify-items: start;
   color: var(--ink);
   font-weight: 760;
   text-decoration: none;
+  word-break: break-word;
 }
 
 .bill-guide-link span:last-child {
-  color: var(--green);
+  color: var(--muted);
   font-size: 11px;
+  font-weight: 650;
+  line-height: 1.32;
 }
 
 .tab-bar {

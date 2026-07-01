@@ -25,6 +25,8 @@ const icons = {
     '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3v8Z"/><path d="m9.5 12 1.8 1.8 3.6-4"/></svg>',
   repeat:
     '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="m7 22-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>',
+  stopHand:
+    '<svg class="icon stop-hand-icon" viewBox="0 0 24 24" aria-hidden="true"><circle class="stop-sign" cx="12" cy="12" r="9"/><path class="stop-sign" d="m5.6 18.4 12.8-12.8"/><path class="stop-palm" d="M8.8 13.2V9.4a1.1 1.1 0 0 1 2.2 0v3.3"/><path class="stop-palm" d="M11 12.5V8.2a1.1 1.1 0 0 1 2.2 0v4.3"/><path class="stop-palm" d="M13.2 12.7V9.1a1.1 1.1 0 0 1 2.2 0v4.8"/><path class="stop-palm" d="M15.4 13.9v-2.3a1.1 1.1 0 0 1 2.2 0v3.2c0 2.5-1.7 4.4-4.3 4.4h-1.1c-1.7 0-2.8-.7-3.8-2l-1.1-1.5a1.1 1.1 0 0 1 1.7-1.4l1.2 1.1"/></svg>',
   inbox:
     '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="m5.5 5.1-3.2 7.4A2 2 0 0 0 4.1 15H20a2 2 0 0 0 1.8-2.8l-3.3-7.1A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1Z"/></svg>',
   mail:
@@ -164,20 +166,57 @@ const pages = {
   },
   bills: {
     eyebrow: "Bills",
-    title: "Recurring bills",
-    subtitle: "Renewals from email",
+    title: "Bills",
+    subtitle: "Recurring and one-time purchases",
     metric: "$10",
-    copy: "Notion Plus renews Jul 2. Recurring charges stay here, separate from subscriptions.",
-    pills: ["Recurring"],
+    copy: "Recurring charges stay here. One-time tickets and receipts start in the inbox, then get pulled into Bills.",
+    pills: ["Recurring", "One-time"],
     actions: [
       ["Remind", "bell", "", null],
       ["Archive", "archive", "secondary", null],
       ["Done", "check", "secondary", null],
     ],
     items: [
-      ["repeat", "Notion Plus", "Renews Jul 2", "$10", "#6b4be8"],
-      ["repeat", "iCloud+", "Renews Jul 5", "$2.99", "#6b4be8"],
-      ["repeat", "ChatGPT Plus", "Renews Jul 11", "$20", "#6b4be8"],
+      ["stopHand", "Notion Plus", "Renews Jul 2", "$10", "#d64242"],
+      ["stopHand", "iCloud+", "Renews Jul 5", "$2.99", "#d64242"],
+      ["stopHand", "ChatGPT Plus", "Renews Jul 11", "$20", "#d64242"],
+    ],
+    tabViews: [
+      {
+        items: [
+          ["stopHand", "Notion Plus", "Renews Jul 2", "$10", "#d64242"],
+          ["stopHand", "iCloud+", "Renews Jul 5", "$2.99", "#d64242"],
+          ["stopHand", "ChatGPT Plus", "Renews Jul 11", "$20", "#d64242"],
+        ],
+      },
+      {
+        items: [
+          [
+            "receipt",
+            "Summer concert tickets",
+            "From Ticketmaster receipt",
+            "$86.50",
+            "#0d8a61",
+            "Email text: 2 tickets, July 18, doors 7:00 PM, mobile entry required.",
+          ],
+          [
+            "calendar",
+            "Comedy night booking",
+            "From Eventbrite confirmation",
+            "$32",
+            "#2458ff",
+            "Email text: Seat B12, show starts 8:30 PM, receipt attached.",
+          ],
+          [
+            "receipt",
+            "Indie theater show",
+            "From box office email",
+            "$24",
+            "#b87506",
+            "Email text: One-time purchase, order #1842, no recurring charge detected.",
+          ],
+        ],
+      },
     ],
   },
   calendar: {
@@ -272,27 +311,36 @@ const pages = {
 const billCancelGuides = {
   notion: {
     name: "Notion Plus",
-    summary:
-      "Use Notion on desktop or web: Settings in the sidebar, then Billing, then Change plan. Choose the downgrade or cancel flow; paid features stay available until the current billing cycle ends.",
+    steps: [
+      "Open Notion on desktop or web.",
+      "Go to Settings, then Billing.",
+      "Choose Change plan and follow the downgrade or cancel flow.",
+      "Your paid features stay active until the current billing cycle ends.",
+    ],
     sourceLabel: "Official Notion guide",
     sourceUrl: "https://www.notion.com/help/upgrade-or-downgrade-your-plan",
-    confidence: "High confidence",
   },
   icloud: {
     name: "iCloud+",
-    summary:
-      "On iPhone, open Settings, tap your name, then Subscriptions, then iCloud+ under Active, and choose Cancel Subscription. Apple warns storage sync can be affected, and the change takes effect after the current billing period.",
+    steps: [
+      "On iPhone, open Settings.",
+      "Tap your name, then Subscriptions.",
+      "Choose iCloud+ under Active.",
+      "Tap Cancel Subscription. Storage changes after the current billing period.",
+    ],
     sourceLabel: "Official Apple guide",
     sourceUrl: "https://support.apple.com/en-us/108318",
-    confidence: "High confidence",
   },
   chatgpt: {
     name: "ChatGPT Plus",
-    summary:
-      "If you subscribed on the web, log in to ChatGPT, open your profile menu, go to Settings, then Billing, and choose Cancel under Cancel plan. Cancel at least 24 hours before the next billing date.",
+    steps: [
+      "Log in to ChatGPT on the web.",
+      "Open your profile menu, then Settings.",
+      "Go to Billing and choose Cancel plan.",
+      "Cancel at least 24 hours before the next billing date.",
+    ],
     sourceLabel: "Official OpenAI guide",
     sourceUrl: "https://help.openai.com/en/articles/7232927-how-do-i-cancel-my-chatgpt-plus-subscription",
-    confidence: "High confidence",
   },
 };
 
@@ -627,14 +675,17 @@ function setupInboxBookmark() {
       openRoute("inbox");
     }
   });
-  handle.addEventListener("pointerdown", (event) => startInboxBookmarkPull(event, bookmark, handle, "pointer"));
-  handle.addEventListener("mousedown", (event) => startInboxBookmarkPull(event, bookmark, handle, "mouse"));
-  handle.addEventListener("touchstart", (event) => startInboxBookmarkPull(event, bookmark, handle, "touch"), {
-    passive: false,
-  });
+  if (window.PointerEvent) {
+    bookmark.addEventListener("pointerdown", (event) => startInboxBookmarkPull(event, bookmark, "pointer"));
+  } else {
+    bookmark.addEventListener("mousedown", (event) => startInboxBookmarkPull(event, bookmark, "mouse"));
+    bookmark.addEventListener("touchstart", (event) => startInboxBookmarkPull(event, bookmark, "touch"), {
+      passive: false,
+    });
+  }
 }
 
-function startInboxBookmarkPull(event, bookmark, handle, inputType) {
+function startInboxBookmarkPull(event, bookmark, inputType) {
   if (inboxBookmarkDrag) return;
   event.preventDefault();
   const point = getEventPoint(event);
@@ -646,9 +697,9 @@ function startInboxBookmarkPull(event, bookmark, handle, inputType) {
   };
 
   if (inputType === "pointer") {
-    handle.setPointerCapture(event.pointerId);
-    handle.addEventListener("pointerup", endInboxBookmarkPull, { once: true });
-    handle.addEventListener("pointercancel", cancelInboxBookmarkPull, { once: true });
+    bookmark.setPointerCapture(event.pointerId);
+    bookmark.addEventListener("pointerup", endInboxBookmarkPull, { once: true });
+    bookmark.addEventListener("pointercancel", cancelInboxBookmarkPull, { once: true });
     window.addEventListener("pointermove", updateInboxBookmarkPull);
     window.addEventListener("pointerup", endInboxBookmarkPull, { once: true });
   } else if (inputType === "mouse") {
@@ -667,7 +718,7 @@ function updateInboxBookmarkPull(event) {
   if (event.cancelable) event.preventDefault();
   const point = getEventPoint(event);
   const deltaY = Math.min(0, point.y - inboxBookmarkDrag.startY);
-  inboxBookmarkDrag.bookmark.style.setProperty("--pull-distance", `${Math.max(deltaY, -76)}px`);
+  inboxBookmarkDrag.bookmark.style.setProperty("--pull-distance", `${Math.max(deltaY, -112)}px`);
   inboxBookmarkDrag.bookmark.classList.toggle("is-pulling", deltaY < -6);
 }
 
@@ -678,7 +729,7 @@ function endInboxBookmarkPull(event) {
   const point = getEventPoint(event);
   const deltaY = point.y - inboxBookmarkDrag.startY;
   resetInboxBookmarkPull();
-  if (deltaY < -28) {
+  if (deltaY < -24) {
     suppressInboxBookmarkClick = true;
     openRoute("inbox");
     window.setTimeout(() => {
@@ -1355,13 +1406,14 @@ function renderBillItems(items = []) {
       ${items
         .map(([icon, title, subtitle, side, color]) => {
           const guideId = getBillGuideId(title);
+          const guideAttr = guideId ? `data-bill-card="${guideId}"` : "";
+          const actionAttr = guideId ? `role="button" tabindex="0" aria-label="Show cancellation steps for ${title}"` : "";
           return `
-            <article class="item bill-item" style="--item-color: ${color}" data-bill-card="${guideId}">
+            <article class="item bill-item${guideId ? " is-guide-trigger" : ""}" style="--item-color: ${color}" ${guideAttr} ${actionAttr}>
               <span class="item-icon">${icons[icon]}</span>
               <span class="item-main"><strong>${title}</strong><span>${subtitle}</span></span>
               <span class="bill-side">
                 <span class="item-side">${side}</span>
-                <button class="bill-cancel-button" type="button" data-bill-cancel="${guideId}">Cancel</button>
               </span>
               <div class="bill-cancel-result" aria-live="polite"></div>
             </article>
@@ -1375,6 +1427,15 @@ function renderBillItems(items = []) {
 function setupBillCancelButtons() {
   document.querySelectorAll("[data-bill-cancel]").forEach((button) => {
     button.addEventListener("click", () => showBillCancelGuide(button.dataset.billCancel));
+  });
+  document.querySelectorAll("[data-bill-card]").forEach((card) => {
+    card.addEventListener("click", () => showBillCancelGuide(card.dataset.billCard));
+    card.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        showBillCancelGuide(card.dataset.billCard);
+      }
+    });
   });
 }
 
@@ -1398,12 +1459,15 @@ function showBillCancelGuide(guideId) {
 
   window.setTimeout(() => {
     card.classList.remove("is-searching");
+    const steps = guide.steps
+      .map((step) => `<li>${step}</li>`)
+      .join("");
     result.innerHTML = `
       <p class="bill-guide-label">${guide.name} cancellation</p>
-      <p>${guide.summary}</p>
+      <ol class="bill-guide-steps">${steps}</ol>
       <a class="bill-guide-link" href="${guide.sourceUrl}" target="_blank" rel="noreferrer">
-        <span>${guide.sourceLabel}</span>
-        <span>${guide.confidence}</span>
+        <span>Source: ${guide.sourceLabel}</span>
+        <span>${guide.sourceUrl}</span>
       </a>
     `;
   }, 520);
