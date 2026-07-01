@@ -129,9 +129,9 @@ const pages = {
     eyebrow: "Today",
     title: "Today summary",
     subtitle: "Time and recurring bills",
-    metric: "2",
-    copy: "A compact read of today's event and recurring bills before the inbox gets loud.",
-    pills: ["1 Summary", "1 Event", "2 Bills"],
+    metric: "5",
+    copy: "Let's start with a birdseye's view.",
+    pills: ["Summary", "Events", "Meetings"],
     actions: [
       ["Calendar", "calendar", "secondary", "calendar"],
       ["Bills", "receipt", "secondary", "bills"],
@@ -144,22 +144,24 @@ const pages = {
     ],
     tabViews: [
       {
-        items: [
-          ["mail", "Today summary", "1 event and 2 recurring bills", "Now", "#343a40"],
-          ["calendar", "Dentist appointment", "Tomorrow 3:00 PM", "Event", "#2458ff"],
-          ["repeat", "Notion Plus", "Renews Jul 2", "$10", "#6b4be8"],
+        summary: [
+          "5 unread emails need a first look.",
+          "2 real-world events may need reminders.",
+          "3 unread meeting invites are waiting for a decision.",
         ],
       },
       {
-        items: [
-          ["calendar", "Dentist appointment", "Tomorrow 3:00 PM", "Event", "#2458ff"],
-          ["bell", "Reminder suggested", "Leave 20 minutes early", "Set", "#2458ff"],
+        reminderItems: [
+          ["Dentist appointment", "Tomorrow 3:00 PM", "Appointment", "#2458ff"],
+          ["Flight check-in window", "Jul 6, 7:45 AM", "Travel", "#0d8a61"],
+          ["Rental car pickup", "Jul 8, 10:00 AM", "Reservation", "#b87506"],
         ],
       },
       {
-        items: [
-          ["repeat", "Notion Plus", "Renews Jul 2", "$10", "#6b4be8"],
-          ["repeat", "iCloud+", "Renews Jul 5", "$2.99", "#6b4be8"],
+        meetingItems: [
+          ["maya", "Fri Jun 30, 9:30 AM", "#2458ff"],
+          ["design.team", "Mon Jul 3, 11:00 AM", "#2458ff"],
+          ["sam", "Tue Jul 4, 2:00 PM", "#2458ff"],
         ],
       },
     ],
@@ -167,26 +169,26 @@ const pages = {
   bills: {
     eyebrow: "Bills",
     title: "Bills",
-    subtitle: "Recurring and one-time purchases",
-    metric: "$10",
-    copy: "Recurring charges stay here. One-time tickets and receipts start in the inbox, then get pulled into Bills.",
-    pills: ["Recurring", "One-time"],
+    subtitle: "Recurring, one-time, and e-transfer",
+    metric: "$10.00",
+    copy: "Let's untangle your finances.",
+    pills: ["Recurring", "One-time", "E-transfer"],
     actions: [
       ["Remind", "bell", "", null],
       ["Archive", "archive", "secondary", null],
       ["Done", "check", "secondary", null],
     ],
     items: [
-      ["stopHand", "Notion Plus", "Renews Jul 2", "$10", "#d64242"],
+      ["stopHand", "Notion Plus", "Renews Jul 2", "$10.00", "#d64242"],
       ["stopHand", "iCloud+", "Renews Jul 5", "$2.99", "#d64242"],
-      ["stopHand", "ChatGPT Plus", "Renews Jul 11", "$20", "#d64242"],
+      ["stopHand", "ChatGPT Plus", "Renews Jul 11", "$20.00", "#d64242"],
     ],
     tabViews: [
       {
         items: [
-          ["stopHand", "Notion Plus", "Renews Jul 2", "$10", "#d64242"],
+          ["stopHand", "Notion Plus", "Renews Jul 2", "$10.00", "#d64242"],
           ["stopHand", "iCloud+", "Renews Jul 5", "$2.99", "#d64242"],
-          ["stopHand", "ChatGPT Plus", "Renews Jul 11", "$20", "#d64242"],
+          ["stopHand", "ChatGPT Plus", "Renews Jul 11", "$20.00", "#d64242"],
         ],
       },
       {
@@ -203,7 +205,7 @@ const pages = {
             "calendar",
             "Comedy night booking",
             "From Eventbrite confirmation",
-            "$32",
+            "$32.00",
             "#2458ff",
             "Email text: Seat B12, show starts 8:30 PM, receipt attached.",
           ],
@@ -211,10 +213,17 @@ const pages = {
             "receipt",
             "Indie theater show",
             "From box office email",
-            "$24",
+            "$24.00",
             "#b87506",
             "Email text: One-time purchase, order #1842, no recurring charge detected.",
           ],
+        ],
+      },
+      {
+        items: [
+          ["letter:M", "Maya Chen", "maya.chen", "$240.00", "#d64242"],
+          ["letter:J", "Jordan Lee", "jordan.lee", "$68.50", "#d64242"],
+          ["letter:A", "Alex Morgan", "alex.morgan", "$125.00", "#d64242"],
         ],
       },
     ],
@@ -224,7 +233,7 @@ const pages = {
     title: "Next appointment",
     subtitle: "Pulled from email",
     metric: "3:00",
-    copy: "Dentist appointment tomorrow. Confirmation email includes address and check-in note.",
+    copy: "Let time arrive with less friction.",
     pills: ["Appointments", "Travel"],
     actions: [
       ["Add", "plus", "", null],
@@ -258,7 +267,7 @@ const pages = {
     title: "Risk check",
     subtitle: "One suspicious email",
     metric: "74",
-    copy: "Sender name says PayPal, but the domain and reply-to do not match.",
+    copy: "Keep the door closed to what feels wrong.",
     pills: ["Domain mismatch", "Urgent payment", "Risky link"],
     actions: [
       ["Preview", "eye", "secondary", null],
@@ -275,7 +284,7 @@ const pages = {
     title: "Subscribed senders",
     subtitle: "Email addresses and sites",
     metric: "26",
-    copy: "Recurring senders live here. Bills, payments, and renewals move to Bills.",
+    copy: "Let the noise reveal who keeps writing.",
     pills: ["Senders", "Websites", "Newsletters"],
     actions: [
       ["Keep", "check", "secondary", null],
@@ -293,7 +302,7 @@ const pages = {
     title: "Needs action",
     subtitle: "Only unresolved mail",
     metric: "5",
-    copy: "The rest can wait. These messages look like they need a reply or decision.",
+    copy: "Only the messages that ask for you.",
     pills: ["Reply", "Review", "Waiting"],
     actions: [
       ["Archive", "archive", "secondary", null],
@@ -1300,6 +1309,7 @@ function renderPage(id) {
   const tabView = page.tabViews?.[activeTabIndex];
   const timeline = tabView?.timeline || page.timeline;
   const items = tabView?.items || page.items;
+  const metric = id === "bills" ? getBillTotal(items) : page.metric;
 
   app.innerHTML = `
     <div class="view page" style="--page-bg: ${id === "security" ? "#fbf4f3" : "var(--bg)"}">
@@ -1312,9 +1322,9 @@ function renderPage(id) {
         </div>
       </header>
 
-      ${id === "security" ? renderRisk(page) : renderMetric(page, color)}
+      ${id === "security" ? renderRisk(page) : renderMetric(page, color, metric)}
       ${renderTabs(id, page.pills)}
-      ${id === "bills" ? renderBillItems(items) : timeline ? renderTimeline(timeline) : renderItems(items)}
+      ${id === "today" ? renderTodayContent(tabView) : id === "bills" ? renderBillItems(items) : timeline ? renderTimeline(timeline) : renderItems(items)}
       ${renderActions(page.actions)}
     </div>
   `;
@@ -1332,12 +1342,15 @@ function renderPage(id) {
   if (id === "bills") {
     setupBillCancelButtons();
   }
+  if (id === "today") {
+    setupReminderButtons();
+  }
 }
 
-function renderMetric(page, color) {
+function renderMetric(page, color, metric = page.metric) {
   return `
     <section class="hero-metric">
-      <strong class="metric-value" style="color: ${color}">${page.metric}</strong>
+      <strong class="metric-value" style="color: ${color}">${metric}</strong>
       <p class="metric-copy">${page.copy}</p>
     </section>
   `;
@@ -1393,11 +1406,78 @@ function renderItems(items = []) {
   `;
 }
 
+function renderTodayContent(tabView = {}) {
+  if (tabView.summary) {
+    return `
+      <section class="today-summary-card">
+        <p>${tabView.summary.join(" ")}</p>
+      </section>
+    `;
+  }
+
+  if (tabView.meetingItems) {
+    return renderReminderItems(
+      tabView.meetingItems.map(([title, subtitle, color]) => ["bell", title, subtitle, "", color]),
+    );
+  }
+
+  return renderReminderItems(
+    (tabView.reminderItems || []).map(([title, subtitle, side, color]) => ["bell", title, subtitle, side, color]),
+  );
+}
+
+function renderReminderItems(items = []) {
+  return `
+    <section class="single-stack">
+      ${items
+        .map(
+          ([icon, title, subtitle, side, color]) => `
+            <article class="item reminder-item" style="--item-color: ${color}">
+              <button class="reminder-bell-button" type="button" aria-label="Set reminder for ${title}" aria-pressed="false">${icons[icon]}</button>
+              <span class="item-main"><strong>${title}</strong><span>${subtitle}</span></span>
+              ${side ? `<span class="item-side">${side}</span>` : ""}
+            </article>
+          `,
+        )
+        .join("")}
+    </section>
+  `;
+}
+
+function setupReminderButtons() {
+  document.querySelectorAll(".reminder-bell-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      const isSet = button.getAttribute("aria-pressed") === "true";
+      button.setAttribute("aria-pressed", String(!isSet));
+      button.classList.toggle("is-set", !isSet);
+    });
+  });
+}
+
 function getBillGuideId(title) {
   if (title.toLowerCase().includes("notion")) return "notion";
   if (title.toLowerCase().includes("icloud")) return "icloud";
   if (title.toLowerCase().includes("chatgpt")) return "chatgpt";
   return "";
+}
+
+function getBillTotal(items = []) {
+  const total = items.reduce((sum, item) => {
+    const amount = Number(String(item[3]).replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(amount) ? sum + amount : sum;
+  }, 0);
+  return `$${total.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function renderBillIcon(icon) {
+  if (icon.startsWith("letter:")) {
+    const letter = icon.slice("letter:".length, "letter:".length + 1).toUpperCase();
+    return `<span class="item-icon bill-letter-avatar" aria-hidden="true">${letter}</span>`;
+  }
+  return `<span class="item-icon">${icons[icon]}</span>`;
 }
 
 function renderBillItems(items = []) {
@@ -1410,7 +1490,7 @@ function renderBillItems(items = []) {
           const actionAttr = guideId ? `role="button" tabindex="0" aria-label="Show cancellation steps for ${title}"` : "";
           return `
             <article class="item bill-item${guideId ? " is-guide-trigger" : ""}" style="--item-color: ${color}" ${guideAttr} ${actionAttr}>
-              <span class="item-icon">${icons[icon]}</span>
+              ${renderBillIcon(icon)}
               <span class="item-main"><strong>${title}</strong><span>${subtitle}</span></span>
               <span class="bill-side">
                 <span class="item-side">${side}</span>

@@ -1094,6 +1094,20 @@ p {
   gap: 10px;
 }
 
+.today-summary-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.today-summary-card p {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 690;
+  line-height: 1.45;
+}
+
 .item {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) auto;
@@ -1114,6 +1128,14 @@ p {
   border-radius: 50%;
   color: var(--item-color, var(--blue));
   background: color-mix(in srgb, var(--item-color, var(--blue)) 11%, #ffffff);
+}
+
+.bill-letter-avatar {
+  color: #ffffff;
+  background: var(--item-color, var(--ink));
+  font-size: 18px;
+  font-weight: 820;
+  line-height: 1;
 }
 
 .item-main {
@@ -1141,6 +1163,34 @@ p {
   color: var(--ink);
   font-size: 14px;
   font-weight: 740;
+}
+
+.reminder-item {
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+}
+
+.reminder-bell-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--item-color, var(--blue)) 12%, #ffffff);
+  color: var(--item-color, var(--blue));
+}
+
+.reminder-bell-button .icon {
+  width: 24px;
+  height: 24px;
+}
+
+.reminder-bell-button:active {
+  transform: scale(0.96);
+}
+
+.reminder-bell-button.is-set {
+  background: var(--item-color, var(--blue));
+  color: #ffffff;
 }
 
 .bill-stack {
