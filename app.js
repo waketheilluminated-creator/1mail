@@ -383,6 +383,18 @@ const billCancelGuides = {
   },
 };
 
+const GMAIL_SYNC_QUERY = "newer_than:7d";
+const GMAIL_SYNC_BATCH_SIZE = 100;
+const GMAIL_SYNC_MAX_MESSAGES = 200;
+const GMAIL_METADATA_HEADERS = [
+  "From",
+  "Subject",
+  "Date",
+  "Reply-To",
+  "List-Unsubscribe",
+  "List-Unsubscribe-Post",
+];
+
 let route = "home";
 let dragState = null;
 let suppressCenterClick = false;
@@ -394,7 +406,7 @@ const aiSuggestions = [
   "Label my travel bookings",
 ];
 
-const aiMailbox = [
+let aiMailbox = [
   {
     id: "ph-1",
     sender: "hello@producthunt.com",
@@ -477,7 +489,7 @@ const aiMailbox = [
   },
 ];
 
-const bookmarkInboxItems = [
+let bookmarkInboxItems = [
   {
     sender: "Maya",
     title: "Question about launch date",
@@ -543,6 +555,7 @@ const pendingAiActions = {};
 let inboxBookmarkDrag = null;
 let suppressInboxBookmarkClick = false;
 let gmailConnectStatus = "";
+let gmailSyncInFlight = false;
 
 function render() {
   if (route === "home") {
@@ -1084,6 +1097,10 @@ function getEventPoint(event) {
 }
 
 function renderSettingsPage() {
+  const profile = getStoredGmailProfile();
+  const displayEmail = profile?.emailAddress || "alex@example.com";
+  const displayName = profile ? displayEmail.split("@")[0] : "Alex Chen";
+
   app.innerHTML = `
     <div class="view page settings-page">
       <header class="page-header">
@@ -1098,8 +1115,8 @@ function renderSettingsPage() {
       <section class="settings-summary">
         <span class="settings-avatar">${icons.user}</span>
         <span>
-          <strong>Alex Chen</strong>
-          <span>alex@example.com</span>
+          <strong>${escapeHtml(displayName)}</strong>
+          <span>${escapeHtml(displayEmail)}</span>
         </span>
       </section>
 
@@ -1151,6 +1168,10 @@ function renderSettingsPage() {
   if (gmailButton) {
     gmailButton.addEventListener("click", startGmailOAuth);
   }
+  const gmailProcessButton = document.querySelector("[data-gmail-process]");
+  if (gmailProcessButton) {
+    gmailProcessButton.addEventListener("click", () => processLatestWeekGmail({ silent: false }));
+  }
   document.querySelector(".feedback-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const input = document.querySelector("#feedbackInput");
@@ -1167,24 +1188,35 @@ function renderSettingsPage() {
 function renderGmailConnectPanel() {
   const config = getGmailConfig();
   const profile = getStoredGmailProfile();
+  const digest = getStoredGmailDigest();
   const isConfigured = isGmailConfigured(config);
-  const status = gmailConnectStatus || (profile ? `Connected as ${profile.emailAddress}` : "Gmail is not connected yet.");
+  const status =
+    gmailConnectStatus ||
+    (digest
+      ? `Processed latest week: ${digest.scannedCount} emails, ${digest.unreadCount} unread.`
+      : profile
+        ? `Connected as ${profile.emailAddress}. Process the latest week to update the app.`
+        : "Gmail is not connected yet.");
   const buttonLabel = profile ? "Reconnect Gmail" : "Connect Gmail";
   const detail = isConfigured
     ? "Uses Google OAuth with read-only Gmail access for prototype testing."
     : "Add your Google iOS OAuth client ID in oauth-config.js before testing on iPhone.";
+  const processButton = profile
+    ? `<button class="gmail-process-button" type="button" data-gmail-process>Process latest week</button>`
+    : "";
 
   return `
     <section class="gmail-connect-card">
       <span class="gmail-connect-icon">${icons.mail}</span>
       <span class="gmail-connect-copy">
         <strong>Gmail test connection</strong>
-        <span>${detail}</span>
-        <em role="status" aria-live="polite">${status}</em>
+        <span>${escapeHtml(detail)}</span>
+        <em role="status" aria-live="polite">${escapeHtml(status)}</em>
       </span>
       <button class="gmail-connect-button" type="button" data-gmail-connect ${isConfigured ? "" : "disabled"}>
         ${buttonLabel}
       </button>
+      ${processButton}
     </section>
   `;
 }
@@ -1457,8 +1489,8 @@ function renderPage(id) {
 function renderMetric(page, color, metric = page.metric) {
   return `
     <section class="hero-metric">
-      <strong class="metric-value" style="color: ${color}">${metric}</strong>
-      <p class="metric-copy">${page.copy}</p>
+      <strong class="metric-value" style="color: ${color}">${escapeHtml(metric)}</strong>
+      <p class="metric-copy">${escapeHtml(page.copy)}</p>
     </section>
   `;
 }
@@ -1496,6 +1528,7 @@ function renderTabs(pageId, tabs) {
 }
 
 function renderItems(items = []) {
+  if (!items.length) return renderEmptyState("Nothing matched here from the latest week.");
   return `
     <section class="single-stack">
       ${items
@@ -1503,8 +1536,8 @@ function renderItems(items = []) {
           ([icon, title, subtitle, side, color]) => `
             <article class="item" style="--item-color: ${color}">
               <span class="item-icon">${icons[icon]}</span>
-              <span class="item-main"><strong>${title}</strong><span>${subtitle}</span></span>
-              <span class="item-side">${side}</span>
+              <span class="item-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(subtitle)}</span></span>
+              <span class="item-side">${escapeHtml(side)}</span>
             </article>
           `,
         )
@@ -1514,6 +1547,7 @@ function renderItems(items = []) {
 }
 
 function renderSubscriptionItems(items = []) {
+  if (!items.length) return renderEmptyState("No senders matched this subscription category in the latest week.");
   return `
     <section class="single-stack subscription-stack">
       ${items
@@ -1529,8 +1563,8 @@ function renderSubscriptionItems(items = []) {
                 data-unsub-mode="${escapeAttribute(mode)}"
                 data-unsub-url="${escapeAttribute(url)}"
               >${icons[icon]}</button>
-              <span class="item-main"><strong>${title}</strong><span>${subtitle}</span></span>
-              <span class="item-side">${side}</span>
+              <span class="item-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(subtitle)}</span></span>
+              <span class="item-side">${escapeHtml(side)}</span>
               <div class="subscription-unsub-result" aria-live="polite"></div>
             </article>
           `,
@@ -1588,7 +1622,7 @@ function renderTodayContent(tabView = {}) {
     return `
       <section class="today-summary-card">
         <ul class="today-summary-list">
-          ${tabView.summary.map((item) => `<li>${item}</li>`).join("")}
+          ${tabView.summary.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
         </ul>
       </section>
     `;
@@ -1606,6 +1640,7 @@ function renderTodayContent(tabView = {}) {
 }
 
 function renderReminderItems(items = []) {
+  if (!items.length) return renderEmptyState("No reminder-ready emails matched this tab in the latest week.");
   return `
     <section class="single-stack">
       ${items
@@ -1620,8 +1655,8 @@ function renderReminderItems(items = []) {
                 data-calendar-title="${escapeAttribute(title)}"
                 data-calendar-time="${escapeAttribute(subtitle)}"
               >${icons[icon]}</button>
-              <span class="item-main"><strong>${title}</strong><span>${subtitle}</span></span>
-              ${side ? `<span class="item-side">${side}</span>` : ""}
+              <span class="item-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(subtitle)}</span></span>
+              ${side ? `<span class="item-side">${escapeHtml(side)}</span>` : ""}
               <p class="reminder-calendar-status" role="status" aria-live="polite"></p>
             </article>
           `,
@@ -1764,6 +1799,15 @@ function escapeAttribute(value = "") {
     .replace(/>/g, "&gt;");
 }
 
+function escapeHtml(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function getBillGuideId(title) {
   if (title.toLowerCase().includes("notion")) return "notion";
   if (title.toLowerCase().includes("icloud")) return "icloud";
@@ -1791,6 +1835,7 @@ function renderBillIcon(icon) {
 }
 
 function renderBillItems(items = []) {
+  if (!items.length) return renderEmptyState("No money emails matched this bill tab in the latest week.");
   return `
     <section class="single-stack bill-stack">
       ${items
@@ -1801,9 +1846,9 @@ function renderBillItems(items = []) {
           return `
             <article class="item bill-item${guideId ? " is-guide-trigger" : ""}" style="--item-color: ${color}" ${guideAttr} ${actionAttr}>
               ${renderBillIcon(icon)}
-              <span class="item-main"><strong>${title}</strong><span>${subtitle}</span></span>
+              <span class="item-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(subtitle)}</span></span>
               <span class="bill-side">
-                <span class="item-side">${side}</span>
+                <span class="item-side">${escapeHtml(side)}</span>
               </span>
               <div class="bill-cancel-result" aria-live="polite"></div>
             </article>
@@ -1864,19 +1909,28 @@ function showBillCancelGuide(guideId) {
 }
 
 function renderTimeline(items = []) {
+  if (!items.length) return renderEmptyState("No timeline items matched this tab in the latest week.");
   return `
     <section class="timeline">
       ${items
         .map(
           ([time, title, subtitle]) => `
             <article class="timeline-item">
-              <span>${time}</span>
-              <strong>${title}</strong>
-              <span>${subtitle}</span>
+              <span>${escapeHtml(time)}</span>
+              <strong>${escapeHtml(title)}</strong>
+              <span>${escapeHtml(subtitle)}</span>
             </article>
           `,
         )
         .join("")}
+    </section>
+  `;
+}
+
+function renderEmptyState(message) {
+  return `
+    <section class="empty-state">
+      <span>${escapeHtml(message)}</span>
     </section>
   `;
 }
@@ -1926,10 +1980,686 @@ function getStoredGmailProfile() {
   }
 }
 
+function getStoredGmailToken() {
+  try {
+    return JSON.parse(localStorage.getItem("oneMailGmailToken") || "null");
+  } catch {
+    return null;
+  }
+}
+
+function getStoredGmailDigest() {
+  try {
+    return JSON.parse(localStorage.getItem("oneMailGmailDigest") || "null");
+  } catch {
+    return null;
+  }
+}
+
 function setGmailConnectStatus(message) {
   gmailConnectStatus = message;
   const status = document.querySelector(".gmail-connect-copy em");
   if (status) status.textContent = message;
+}
+
+async function processLatestWeekGmail(options = {}) {
+  const { accessToken = "", silent = false } = options;
+  if (gmailSyncInFlight) return null;
+  gmailSyncInFlight = true;
+
+  try {
+    if (!silent) setGmailConnectStatus("Processing the latest week of Gmail...");
+    const token = accessToken || (await getValidGmailAccessToken());
+    const messages = await fetchLatestWeekGmailMessages(token);
+    const digest = buildGmailDigest(messages);
+    localStorage.setItem("oneMailGmailDigest", JSON.stringify(digest));
+    applyGmailDigest(digest);
+    setGmailConnectStatus(`Processed latest week: ${digest.scannedCount} emails, ${digest.unreadCount} unread.`);
+    render();
+    return digest;
+  } catch (error) {
+    if (!silent || route === "settings") {
+      setGmailConnectStatus(`Gmail processing failed: ${error.message}`);
+    }
+    return null;
+  } finally {
+    gmailSyncInFlight = false;
+  }
+}
+
+async function getValidGmailAccessToken() {
+  const token = getStoredGmailToken();
+  if (!token?.accessToken) {
+    throw new Error("Connect Gmail first.");
+  }
+  if (!token.expiresAt || token.expiresAt > Date.now() + 60_000) {
+    return token.accessToken;
+  }
+  if (!token.refreshToken) {
+    throw new Error("Gmail token expired. Reconnect Gmail.");
+  }
+  const refreshed = await refreshGmailAccessToken(token.refreshToken);
+  return refreshed.accessToken;
+}
+
+async function refreshGmailAccessToken(refreshToken) {
+  const config = getGmailConfig();
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: config.clientId,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body.error_description || body.error || "Could not refresh Gmail token");
+  }
+  const stored = getStoredGmailToken() || {};
+  const nextToken = {
+    ...stored,
+    accessToken: body.access_token,
+    expiresAt: Date.now() + Number(body.expires_in || 3600) * 1000,
+    refreshToken: body.refresh_token || stored.refreshToken || refreshToken,
+    scope: body.scope || stored.scope || "",
+    tokenType: body.token_type || stored.tokenType || "Bearer",
+  };
+  localStorage.setItem("oneMailGmailToken", JSON.stringify(nextToken));
+  return nextToken;
+}
+
+async function fetchLatestWeekGmailMessages(accessToken) {
+  const ids = [];
+  let pageToken = "";
+
+  do {
+    const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
+    listUrl.searchParams.set("includeSpamTrash", "false");
+    listUrl.searchParams.set("maxResults", String(Math.min(GMAIL_SYNC_BATCH_SIZE, GMAIL_SYNC_MAX_MESSAGES - ids.length)));
+    listUrl.searchParams.set("q", GMAIL_SYNC_QUERY);
+    if (pageToken) listUrl.searchParams.set("pageToken", pageToken);
+
+    const response = await fetch(listUrl.toString(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(body.error?.message || "Could not list Gmail messages");
+    }
+    ids.push(...(body.messages || []));
+    pageToken = body.nextPageToken || "";
+  } while (pageToken && ids.length < GMAIL_SYNC_MAX_MESSAGES);
+
+  const details = await Promise.all(ids.map((message) => fetchGmailMessageMetadata(accessToken, message.id)));
+  return details.filter(Boolean);
+}
+
+async function fetchGmailMessageMetadata(accessToken, messageId) {
+  const url = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`);
+  url.searchParams.set("format", "metadata");
+  GMAIL_METADATA_HEADERS.forEach((header) => url.searchParams.append("metadataHeaders", header));
+
+  const response = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(body.error?.message || "Could not read Gmail message metadata");
+  }
+  return normalizeGmailMessage(body);
+}
+
+function normalizeGmailMessage(message) {
+  const headers = getHeaderMap(message.payload?.headers || []);
+  const sender = parseSender(headers.from || "");
+  const internalDate = Number(message.internalDate || 0);
+  const date = new Date(internalDate || Date.parse(headers.date || "") || Date.now());
+
+  return {
+    id: message.id,
+    threadId: message.threadId,
+    labelIds: message.labelIds || [],
+    isUnread: (message.labelIds || []).includes("UNREAD"),
+    subject: cleanSubject(headers.subject || "(no subject)"),
+    snippet: message.snippet || "",
+    date: date.toISOString(),
+    from: headers.from || "",
+    replyTo: headers["reply-to"] || "",
+    senderName: sender.name,
+    senderEmail: sender.email,
+    senderDomain: sender.domain,
+    listUnsubscribe: headers["list-unsubscribe"] || "",
+    listUnsubscribePost: headers["list-unsubscribe-post"] || "",
+  };
+}
+
+function getHeaderMap(headers) {
+  return headers.reduce((map, header) => {
+    map[String(header.name || "").toLowerCase()] = header.value || "";
+    return map;
+  }, {});
+}
+
+function parseSender(value = "") {
+  const bracketEmail = value.match(/<([^<>@\s]+@[^<>\s]+)>/);
+  const looseEmail = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  const email = (bracketEmail?.[1] || looseEmail?.[0] || "").toLowerCase();
+  const rawName = bracketEmail ? value.slice(0, value.indexOf("<")) : value.replace(looseEmail?.[0] || "", "");
+  const name = rawName.replace(/^"|"$/g, "").trim() || email.split("@")[0] || "Unknown sender";
+  return {
+    domain: email.split("@")[1] || "",
+    email,
+    name,
+  };
+}
+
+function cleanSubject(subject = "") {
+  return String(subject)
+    .replace(/^\s*(re|fw|fwd):\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim() || "(no subject)";
+}
+
+function buildGmailDigest(messages = []) {
+  const unread = messages.filter((message) => message.isUnread);
+  const events = messages.filter((message) => isEventMessage(message) && !isMeetingMessage(message));
+  const meetings = unread.filter(isMeetingMessage);
+  const subscriptions = buildSubscriptionViews(messages);
+  const bills = buildBillViews(messages);
+  const inboxItems = buildInboxItems(unread);
+  const calendar = buildCalendarViews(events, messages);
+  const security = buildSecurityItems(messages);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    query: GMAIL_SYNC_QUERY,
+    scannedCount: messages.length,
+    unreadCount: unread.length,
+    messages,
+    sections: {
+      bills,
+      calendar,
+      inbox: {
+        count: inboxItems.length,
+        items: inboxItems,
+      },
+      security,
+      subscriptions,
+      today: {
+        events,
+        meetings,
+        summary: [
+          `${unread.length} unread emails need a first look.`,
+          `${events.length} events may need reminders.`,
+          `${meetings.length} unread meeting invites are waiting for a decision.`,
+        ],
+      },
+    },
+  };
+}
+
+function applyStoredGmailDigest() {
+  const digest = getStoredGmailDigest();
+  if (digest) applyGmailDigest(digest);
+}
+
+function applyGmailDigest(digest) {
+  const sections = digest.sections || {};
+  const today = sections.today || {};
+  const events = today.events || [];
+  const meetings = today.meetings || [];
+
+  pages.today.subtitle = "Latest week from Gmail";
+  pages.today.metric = String(digest.unreadCount || 0);
+  pages.today.tabViews = [
+    { summary: today.summary || [] },
+    {
+      reminderItems: events.slice(0, 8).map((message) => [
+        getEventTitle(message),
+        getMessageWhen(message),
+        getEventCategory(message),
+        "#2458ff",
+      ]),
+    },
+    {
+      meetingItems: meetings.slice(0, 8).map((message) => [
+        message.senderEmail || message.from || message.senderName,
+        getMessageWhen(message),
+        "#2458ff",
+      ]),
+    },
+  ];
+
+  const bills = sections.bills || {};
+  pages.bills.subtitle = "Latest week from Gmail";
+  pages.bills.tabViews = [
+    { items: bills.recurring || [] },
+    { items: bills.oneTime || [] },
+    { items: bills.eTransfer || [] },
+  ];
+  pages.bills.items = pages.bills.tabViews[0].items;
+
+  const subscriptions = sections.subscriptions || {};
+  pages.subscriptions.metric = String(subscriptions.total || 0);
+  pages.subscriptions.subtitle = "Latest week from Gmail";
+  pages.subscriptions.tabViews = [
+    { items: subscriptions.promos || [] },
+    { items: subscriptions.newsletter || [] },
+    { items: subscriptions.social || [] },
+    { items: subscriptions.productivity || [] },
+  ];
+  pages.subscriptions.items = pages.subscriptions.tabViews[0].items;
+
+  const inbox = sections.inbox || {};
+  pages.inbox.metric = String(inbox.count || 0);
+  pages.inbox.subtitle = "Unread mail from the latest week";
+  pages.inbox.items = inbox.items || [];
+
+  const calendar = sections.calendar || {};
+  pages.calendar.metric = calendar.nextTime || "0";
+  pages.calendar.subtitle = "Latest week from Gmail";
+  pages.calendar.tabViews = [
+    { timeline: calendar.appointments || [] },
+    { timeline: calendar.travel || [] },
+  ];
+  pages.calendar.timeline = pages.calendar.tabViews[0].timeline;
+
+  const security = sections.security || {};
+  pages.security.metric = String(security.riskScore || 12);
+  pages.security.subtitle = security.items?.length ? "Suspicious mail from Gmail" : "No obvious suspicious mail";
+  pages.security.items = security.items || [];
+
+  bookmarkInboxItems = (digest.messages || []).slice(0, 8).map((message) => ({
+    sender: message.senderName || message.senderEmail || "Gmail",
+    time: formatRelativeMailDate(message.date),
+    title: message.subject,
+    tone: getMessageTone(message),
+  }));
+
+  aiMailbox = (digest.messages || []).map((message) => ({
+    id: message.id,
+    sender: message.senderEmail || message.senderName,
+    site: message.senderDomain,
+    title: message.subject,
+    date: formatRelativeMailDate(message.date),
+    category: getMessageTone(message).toLowerCase(),
+    labels: message.labelIds || [],
+    unsubscribe: getUnsubscribeMode(message),
+  }));
+}
+
+function buildSubscriptionViews(messages) {
+  const groups = {
+    promos: [],
+    newsletter: [],
+    social: [],
+    productivity: [],
+  };
+  const seen = new Set();
+
+  messages.forEach((message) => {
+    if (!isSubscriptionMessage(message)) return;
+    const category = getSubscriptionCategory(message);
+    const key = `${category}:${message.senderEmail || message.senderName}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const url = getUnsubscribeUrl(message) || (message.senderDomain ? `https://${message.senderDomain}` : "");
+    groups[category].push([
+      "stopHand",
+      message.senderEmail || message.senderName,
+      message.senderDomain || message.senderName,
+      getSubscriptionSideLabel(category),
+      "#d64242",
+      getUnsubscribeMode(message),
+      url,
+    ]);
+  });
+
+  return {
+    ...groups,
+    total: Object.values(groups).reduce((sum, items) => sum + items.length, 0),
+  };
+}
+
+function buildBillViews(messages) {
+  return {
+    eTransfer: messages.filter(isETransferMessage).slice(0, 8).map((message) => {
+      const receiver = getTransferReceiver(message);
+      return [
+        `letter:${getMailboxInitial(receiver.name)}`,
+        receiver.name,
+        receiver.emailLocal || message.senderEmail.split("@")[0] || message.senderName,
+        formatMoney(getMessageAmount(message)),
+        "#d64242",
+      ];
+    }),
+    oneTime: messages.filter(isOneTimePurchaseMessage).slice(0, 8).map((message) => [
+      getPurchaseIcon(message),
+      getPurchaseTitle(message),
+      `From ${message.senderName}`,
+      formatMoney(getMessageAmount(message)),
+      "#0d8a61",
+    ]),
+    recurring: messages.filter(isRecurringBillMessage).slice(0, 8).map((message) => [
+      "stopHand",
+      getBillTitle(message),
+      getBillSubtitle(message),
+      formatMoney(getMessageAmount(message)),
+      "#d64242",
+    ]),
+  };
+}
+
+function buildInboxItems(messages) {
+  return messages.slice(0, 10).map((message) => [
+    getInboxIcon(message),
+    message.senderEmail || message.senderName,
+    message.subject,
+    getMessageTone(message),
+    getToneColor(message),
+  ]);
+}
+
+function buildCalendarViews(events, messages) {
+  const appointments = events
+    .filter((message) => !isTravelMessage(message))
+    .slice(0, 8)
+    .map((message) => [getMessageWhen(message), getEventTitle(message), message.senderName]);
+  const travel = messages
+    .filter(isTravelMessage)
+    .slice(0, 8)
+    .map((message) => [getMessageWhen(message), getEventTitle(message), message.senderName]);
+
+  return {
+    appointments,
+    nextTime: (appointments[0]?.[0] || travel[0]?.[0] || "0").split(",")[0],
+    travel,
+  };
+}
+
+function buildSecurityItems(messages) {
+  const suspicious = messages.filter(isSuspiciousMessage).slice(0, 6);
+  return {
+    items: suspicious.map((message) => [
+      "alert",
+      message.subject,
+      message.senderDomain || message.senderEmail || message.senderName,
+      "Review",
+      "#d64242",
+    ]),
+    riskScore: suspicious.length ? Math.min(94, 50 + suspicious.length * 12) : 12,
+  };
+}
+
+function messageText(message) {
+  return `${message.subject || ""} ${message.snippet || ""} ${message.senderName || ""} ${message.senderEmail || ""}`.toLowerCase();
+}
+
+function includesAny(value, keywords) {
+  return keywords.some((keyword) => value.includes(keyword));
+}
+
+function isEventMessage(message) {
+  const text = messageText(message);
+  return includesAny(text, [
+    "appointment",
+    "booking",
+    "reservation",
+    "ticket",
+    "concert",
+    "show",
+    "flight",
+    "hotel",
+    "rental car",
+    "check-in",
+    "pickup",
+    "calendar",
+    "event",
+  ]);
+}
+
+function isMeetingMessage(message) {
+  const text = messageText(message);
+  return includesAny(text, [
+    "meeting",
+    "invite",
+    "invitation",
+    "zoom",
+    "google meet",
+    "microsoft teams",
+    "teams meeting",
+    "calendar invitation",
+    "accepted:",
+    "declined:",
+  ]);
+}
+
+function isTravelMessage(message) {
+  const text = messageText(message);
+  return includesAny(text, ["flight", "hotel", "airline", "boarding", "check-in", "rental car", "reservation", "booking"]);
+}
+
+function getEventTitle(message) {
+  return message.subject || `${getEventCategory(message)} from ${message.senderName}`;
+}
+
+function getEventCategory(message) {
+  const text = messageText(message);
+  if (text.includes("appointment")) return "Appointment";
+  if (text.includes("flight") || text.includes("boarding") || text.includes("airline")) return "Flight";
+  if (text.includes("hotel") || text.includes("check-in")) return "Hotel";
+  if (text.includes("rental car") || text.includes("pickup")) return "Rental";
+  if (text.includes("ticket") || text.includes("concert") || text.includes("show")) return "Ticket";
+  if (text.includes("reservation") || text.includes("booking")) return "Reservation";
+  return "Event";
+}
+
+function getMessageWhen(message) {
+  const text = `${message.subject || ""} ${message.snippet || ""}`;
+  const explicitDate = text.match(
+    /\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)?\.?\s?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+\d{1,2}(?:,\s*\d{4})?(?:\s*(?:at)?\s*\d{1,2}:\d{2}\s*(?:AM|PM)?)?/i,
+  );
+  if (explicitDate) return normalizeWhitespace(explicitDate[0]);
+
+  const monthlessTime = text.match(/\b(?:today|tomorrow|tonight)\s*(?:at)?\s*\d{1,2}(?::\d{2})?\s*(?:AM|PM)\b/i);
+  if (monthlessTime) return normalizeWhitespace(monthlessTime[0]);
+
+  return formatMailDate(message.date);
+}
+
+function normalizeWhitespace(value = "") {
+  return String(value).replace(/\s+/g, " ").trim();
+}
+
+function isSubscriptionMessage(message) {
+  const text = messageText(message);
+  return Boolean(
+    message.listUnsubscribe ||
+      message.labelIds.includes("CATEGORY_PROMOTIONS") ||
+      message.labelIds.includes("CATEGORY_SOCIAL") ||
+      includesAny(text, ["unsubscribe", "newsletter", "digest", "sale", "deal", "promo", "notification preferences"]),
+  );
+}
+
+function getSubscriptionCategory(message) {
+  const text = messageText(message);
+  if (
+    message.labelIds.includes("CATEGORY_SOCIAL") ||
+    includesAny(text, ["linkedin", "instagram", "facebook", "discord", "reddit", "twitter", "x.com", "followed you"])
+  ) {
+    return "social";
+  }
+  if (
+    includesAny(text, [
+      "notion",
+      "figma",
+      "linear",
+      "slack",
+      "github",
+      "jira",
+      "asana",
+      "trello",
+      "workspace",
+      "product update",
+    ])
+  ) {
+    return "productivity";
+  }
+  if (includesAny(text, ["newsletter", "digest", "weekly", "roundup", "substack", "medium", "product hunt", "news"])) {
+    return "newsletter";
+  }
+  return "promos";
+}
+
+function getSubscriptionSideLabel(category) {
+  return {
+    newsletter: "Digest",
+    productivity: "Product",
+    promos: "Promo",
+    social: "Social",
+  }[category];
+}
+
+function getUnsubscribeMode(message) {
+  return message.listUnsubscribePost.toLowerCase().includes("one-click") ? "one-click" : "web";
+}
+
+function getUnsubscribeUrl(message) {
+  const urls = message.listUnsubscribe.match(/https?:\/\/[^>,\s]+/gi);
+  if (urls?.[0]) return urls[0];
+  return "";
+}
+
+function isETransferMessage(message) {
+  const text = messageText(message);
+  return includesAny(text, ["e-transfer", "etransfer", "interac", "sent you money", "money sent", "sent money"]);
+}
+
+function isOneTimePurchaseMessage(message) {
+  const text = `${message.subject || ""} ${message.snippet || ""}`.toLowerCase();
+  const hasAmount = getMessageAmount(message) > 0;
+  return (
+    !isRecurringBillMessage(message) &&
+    (hasAmount || includesAny(text, ["receipt", "invoice", "order", "purchase"])) &&
+    includesAny(text, ["receipt", "invoice", "order", "purchase", "ticket", "concert", "show", "eventbrite", "ticketmaster", "box office"])
+  );
+}
+
+function isRecurringBillMessage(message) {
+  const text = messageText(message);
+  return includesAny(text, ["subscription", "renewal", "renews", "monthly", "annual", "membership", "plan renew", "billing cycle"]);
+}
+
+function getMessageAmount(message) {
+  const text = `${message.subject || ""} ${message.snippet || ""}`;
+  const amount = text.match(/(?:CA\$|US\$|\$)\s*([0-9][0-9,]*(?:\.[0-9]{2})?)/i);
+  if (!amount) return 0;
+  return Number(amount[1].replace(/,/g, "")) || 0;
+}
+
+function formatMoney(value) {
+  const amount = Math.abs(Number(value) || 0);
+  return `$${amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function getTransferReceiver(message) {
+  const text = `${message.subject || ""} ${message.snippet || ""}`;
+  const email = (text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "").toLowerCase();
+  const name =
+    text.match(/\bto\s+([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,2})/)?.[1] ||
+    email.split("@")[0]?.replace(/[._-]+/g, " ") ||
+    message.senderName ||
+    "Contact";
+  return {
+    emailLocal: email.split("@")[0] || "",
+    name: normalizeWhitespace(name),
+  };
+}
+
+function getPurchaseIcon(message) {
+  const category = getEventCategory(message);
+  if (["Appointment", "Flight", "Hotel", "Rental", "Ticket", "Reservation"].includes(category)) return "receipt";
+  return "receipt";
+}
+
+function getPurchaseTitle(message) {
+  return message.subject || `Receipt from ${message.senderName}`;
+}
+
+function getBillTitle(message) {
+  return message.subject.replace(/receipt|invoice|payment|subscription|renewal/gi, "").trim() || message.senderName;
+}
+
+function getBillSubtitle(message) {
+  const when = getMessageWhen(message);
+  if (when) return `From ${message.senderName} · ${when}`;
+  return `From ${message.senderName}`;
+}
+
+function getInboxIcon(message) {
+  if (isMeetingMessage(message) || isEventMessage(message)) return "calendar";
+  if (isRecurringBillMessage(message) || isOneTimePurchaseMessage(message) || isETransferMessage(message)) return "receipt";
+  if (isSuspiciousMessage(message)) return "alert";
+  return "mail";
+}
+
+function getMessageTone(message) {
+  if (isSuspiciousMessage(message)) return "Review";
+  if (isMeetingMessage(message)) return "Meeting";
+  if (isEventMessage(message)) return getEventCategory(message);
+  if (isRecurringBillMessage(message)) return "Bill";
+  if (isOneTimePurchaseMessage(message)) return "Receipt";
+  if (isSubscriptionMessage(message)) return "Subscription";
+  return "Unread";
+}
+
+function getToneColor(message) {
+  if (isSuspiciousMessage(message)) return "#d64242";
+  if (isMeetingMessage(message) || isEventMessage(message)) return "#2458ff";
+  if (isRecurringBillMessage(message) || isOneTimePurchaseMessage(message) || isETransferMessage(message)) return "#0d8a61";
+  if (isSubscriptionMessage(message)) return "#6b4be8";
+  return "#343a40";
+}
+
+function isSuspiciousMessage(message) {
+  const text = messageText(message);
+  return includesAny(text, [
+    "urgent payment",
+    "wire transfer",
+    "gift card",
+    "password expires",
+    "account locked",
+    "verify your account",
+    "suspended",
+    "crypto",
+    "unusual sign-in",
+  ]);
+}
+
+function formatMailDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown time";
+  return date.toLocaleString("en-US", {
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    month: "short",
+  });
+}
+
+function formatRelativeMailDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Now";
+  const minutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60000));
+  if (minutes < 60) return `${Math.max(1, minutes)}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
 }
 
 async function startGmailOAuth() {
@@ -2022,8 +2752,8 @@ async function handleGmailOAuthRedirect(callbackUrl) {
     );
     const profile = await fetchGmailProfile(token.access_token);
     localStorage.setItem("oneMailGmailProfile", JSON.stringify(profile));
-    setGmailConnectStatus(`Connected as ${profile.emailAddress}`);
-    if (route === "settings") renderSettingsPage();
+    setGmailConnectStatus(`Connected as ${profile.emailAddress}. Processing latest week...`);
+    await processLatestWeekGmail({ accessToken: token.access_token, silent: false });
   } catch (exchangeError) {
     setGmailConnectStatus(`Gmail connection failed: ${exchangeError.message}`);
   }
@@ -2093,5 +2823,9 @@ function base64Url(bytes) {
   return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+applyStoredGmailDigest();
 setupGmailOAuthRedirectListener();
 render();
+window.setTimeout(() => {
+  if (getStoredGmailToken()) processLatestWeekGmail({ silent: true });
+}, 450);
