@@ -386,14 +386,7 @@ const billCancelGuides = {
 const GMAIL_SYNC_QUERY = "newer_than:7d";
 const GMAIL_SYNC_BATCH_SIZE = 100;
 const GMAIL_SYNC_MAX_MESSAGES = 200;
-const GMAIL_METADATA_HEADERS = [
-  "From",
-  "Subject",
-  "Date",
-  "Reply-To",
-  "List-Unsubscribe",
-  "List-Unsubscribe-Post",
-];
+const GMAIL_BODY_TEXT_LIMIT = 12000;
 
 let route = "home";
 let dragState = null;
@@ -2098,8 +2091,7 @@ async function fetchLatestWeekGmailMessages(accessToken) {
 
 async function fetchGmailMessageMetadata(accessToken, messageId) {
   const url = new URL(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`);
-  url.searchParams.set("format", "metadata");
-  GMAIL_METADATA_HEADERS.forEach((header) => url.searchParams.append("metadataHeaders", header));
+  url.searchParams.set("format", "full");
 
   const response = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -2116,6 +2108,7 @@ function normalizeGmailMessage(message) {
   const sender = parseSender(headers.from || "");
   const internalDate = Number(message.internalDate || 0);
   const date = new Date(internalDate || Date.parse(headers.date || "") || Date.now());
+  const bodyText = extractGmailBodyText(message.payload).slice(0, GMAIL_BODY_TEXT_LIMIT);
 
   return {
     id: message.id,
@@ -2124,6 +2117,7 @@ function normalizeGmailMessage(message) {
     isUnread: (message.labelIds || []).includes("UNREAD"),
     subject: cleanSubject(headers.subject || "(no subject)"),
     snippet: message.snippet || "",
+    bodyText,
     date: date.toISOString(),
     from: headers.from || "",
     replyTo: headers["reply-to"] || "",
@@ -2140,6 +2134,65 @@ function getHeaderMap(headers) {
     map[String(header.name || "").toLowerCase()] = header.value || "";
     return map;
   }, {});
+}
+
+function extractGmailBodyText(payload) {
+  const textParts = flattenGmailPayload(payload)
+    .filter((part) => {
+      const mimeType = String(part.mimeType || "").toLowerCase();
+      return !part.filename && part.body?.data && (mimeType === "text/plain" || mimeType === "text/html");
+    })
+    .sort((left, right) => getGmailMimeScore(left.mimeType) - getGmailMimeScore(right.mimeType));
+
+  return normalizeWhitespace(
+    textParts
+      .map((part) => {
+        const decoded = decodeGmailBase64Text(part.body.data);
+        return String(part.mimeType || "").toLowerCase() === "text/html" ? stripHtml(decoded) : decoded;
+      })
+      .filter(Boolean)
+      .join(" "),
+  );
+}
+
+function flattenGmailPayload(payload) {
+  if (!payload) return [];
+  const parts = [payload];
+  (payload.parts || []).forEach((part) => {
+    parts.push(...flattenGmailPayload(part));
+  });
+  return parts;
+}
+
+function getGmailMimeScore(mimeType = "") {
+  return String(mimeType).toLowerCase() === "text/plain" ? 0 : 1;
+}
+
+function decodeGmailBase64Text(value = "") {
+  try {
+    const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return "";
+  }
+}
+
+function stripHtml(value = "") {
+  return String(value)
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/gi, '"');
 }
 
 function parseSender(value = "") {
@@ -2339,14 +2392,14 @@ function buildBillViews(messages) {
       getPurchaseIcon(message),
       getPurchaseTitle(message),
       `From ${message.senderName}`,
-      formatMoney(getMessageAmount(message)),
+      getFinanceSideLabel(message),
       "#0d8a61",
     ]),
     recurring: messages.filter(isRecurringBillMessage).slice(0, 8).map((message) => [
       "stopHand",
       getBillTitle(message),
       getBillSubtitle(message),
-      formatMoney(getMessageAmount(message)),
+      getFinanceSideLabel(message),
       "#d64242",
     ]),
   };
@@ -2394,7 +2447,11 @@ function buildSecurityItems(messages) {
 }
 
 function messageText(message) {
-  return `${message.subject || ""} ${message.snippet || ""} ${message.senderName || ""} ${message.senderEmail || ""}`.toLowerCase();
+  return `${message.subject || ""} ${message.snippet || ""} ${message.bodyText || ""} ${message.senderName || ""} ${message.senderEmail || ""}`.toLowerCase();
+}
+
+function messageContentText(message) {
+  return `${message.subject || ""} ${message.snippet || ""} ${message.bodyText || ""}`.toLowerCase();
 }
 
 function includesAny(value, keywords) {
@@ -2538,23 +2595,57 @@ function isETransferMessage(message) {
 }
 
 function isOneTimePurchaseMessage(message) {
-  const text = `${message.subject || ""} ${message.snippet || ""}`.toLowerCase();
+  const text = messageContentText(message);
   const hasAmount = getMessageAmount(message) > 0;
   return (
+    !isETransferMessage(message) &&
     !isRecurringBillMessage(message) &&
-    (hasAmount || includesAny(text, ["receipt", "invoice", "order", "purchase"])) &&
-    includesAny(text, ["receipt", "invoice", "order", "purchase", "ticket", "concert", "show", "eventbrite", "ticketmaster", "box office"])
+    (hasAmount || includesAny(text, ["invoice", "receipt", "statement", "order", "purchase", "payment due", "amount due"])) &&
+    includesAny(text, [
+      "invoice",
+      "receipt",
+      "statement",
+      "order",
+      "purchase",
+      "payment due",
+      "amount due",
+      "balance due",
+      "paid",
+      "charge",
+      "transaction",
+      "ticket",
+      "concert",
+      "show",
+      "eventbrite",
+      "ticketmaster",
+      "box office",
+    ])
   );
 }
 
 function isRecurringBillMessage(message) {
   const text = messageText(message);
-  return includesAny(text, ["subscription", "renewal", "renews", "monthly", "annual", "membership", "plan renew", "billing cycle"]);
+  return (
+    !isETransferMessage(message) &&
+    includesAny(text, [
+      "subscription",
+      "renewal",
+      "renews",
+      "monthly",
+      "annual",
+      "membership",
+      "plan renew",
+      "billing cycle",
+      "recurring charge",
+      "auto-renew",
+      "autorenew",
+    ])
+  );
 }
 
 function getMessageAmount(message) {
-  const text = `${message.subject || ""} ${message.snippet || ""}`;
-  const amount = text.match(/(?:CA\$|US\$|\$)\s*([0-9][0-9,]*(?:\.[0-9]{2})?)/i);
+  const text = messageContentText(message);
+  const amount = text.match(/(?:CA\$|US\$|USD|CAD|\$)\s*([0-9][0-9,]*(?:\.[0-9]{2})?)/i);
   if (!amount) return 0;
   return Number(amount[1].replace(/,/g, "")) || 0;
 }
@@ -2567,8 +2658,20 @@ function formatMoney(value) {
   })}`;
 }
 
+function getFinanceSideLabel(message) {
+  const amount = getMessageAmount(message);
+  if (amount > 0) return formatMoney(amount);
+
+  const text = messageContentText(message);
+  if (text.includes("invoice")) return "Invoice";
+  if (text.includes("statement")) return "Statement";
+  if (text.includes("receipt")) return "Receipt";
+  if (text.includes("payment due") || text.includes("amount due") || text.includes("balance due")) return "Due";
+  return "Review";
+}
+
 function getTransferReceiver(message) {
-  const text = `${message.subject || ""} ${message.snippet || ""}`;
+  const text = messageContentText(message);
   const email = (text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "").toLowerCase();
   const name =
     text.match(/\bto\s+([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+){0,2})/)?.[1] ||
