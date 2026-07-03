@@ -392,6 +392,8 @@ let route = "home";
 let dragState = null;
 let suppressCenterClick = false;
 const activePageTabs = {};
+const SUBSCRIPTION_UNSUBSCRIBED_STORAGE_KEY = "oneMailUnsubscribedSenders";
+const unsubscribedSubscriptionKeys = loadUnsubscribedSubscriptionKeys();
 
 const aiSuggestions = [
   "Unsubscribe Product Hunt",
@@ -567,6 +569,7 @@ function render() {
 }
 
 function renderHome() {
+  app.classList.remove("is-page-view");
   const sliceAngle = 360 / modules.length;
   const mailboxAvatar = getMailboxAvatar();
   app.innerHTML = `
@@ -615,7 +618,7 @@ function renderHome() {
           <button class="center-control" id="centerControl" type="button" aria-label="1Mail AI">
             <span class="center-mark">
               <strong id="centerLabel">1Mail AI</strong>
-              <span id="centerHint">Ask anything about your mailbox</span>
+              <span id="centerHint" class="center-hint">Ask anything about your mailbox</span>
             </span>
           </button>
         </div>
@@ -690,6 +693,7 @@ function renderHome() {
   document.querySelectorAll("[data-open]").forEach((button) => {
     button.addEventListener("click", () => openRoute(button.dataset.open));
   });
+  fitOneLineText();
 }
 
 function renderInboxBookmark() {
@@ -698,7 +702,7 @@ function renderInboxBookmark() {
     <footer class="home-footer">
       <section class="inbox-bookmark" id="inboxBookmark">
         <div class="bookmark-copy">
-          <strong>${bookmarkPrompt}</strong>
+          <strong class="fit-one-line">${bookmarkPrompt}</strong>
         </div>
         <button class="cat-peek-handle" id="catInboxHandle" type="button" aria-label="Pull up normal inbox">
           <span class="cat-peek" aria-hidden="true">
@@ -1058,6 +1062,7 @@ function setWheelFocus(moduleId, mode = "idle") {
     label.textContent = "1Mail AI";
     label.style.removeProperty("--label-size");
     hint.textContent = "Ask anything about your mailbox";
+    fitOneLineText(center);
     return;
   }
 
@@ -1071,6 +1076,7 @@ function setWheelFocus(moduleId, mode = "idle") {
   label.textContent = module.label;
   label.style.setProperty("--label-size", getCenterLabelSize(module.label));
   hint.textContent = module.wheelDescription || pages[module.id]?.subtitle || "Section";
+  fitOneLineText(center);
 }
 
 function getCenterLabelSize(label) {
@@ -1079,6 +1085,28 @@ function getCenterLabelSize(label) {
   if (length > 9) return "19px";
   if (length > 7) return "22px";
   return "25px";
+}
+
+function fitOneLineText(root = document) {
+  const scopedElements = root.querySelectorAll ? Array.from(root.querySelectorAll(".fit-one-line")) : [];
+  const elements = root.matches?.(".fit-one-line") ? [root, ...scopedElements] : scopedElements;
+
+  elements.forEach((element) => {
+    element.style.removeProperty("font-size");
+    const baseSize = Number(element.dataset.fitBase || parseFloat(getComputedStyle(element).fontSize) || 14);
+    const minSize = Number(element.dataset.fitMin || 8.5);
+    element.dataset.fitBase = String(baseSize);
+    element.style.fontSize = `${baseSize}px`;
+
+    if (!element.clientWidth || element.scrollWidth <= element.clientWidth) return;
+
+    let nextSize = baseSize;
+    while (element.scrollWidth > element.clientWidth && nextSize > minSize) {
+      nextSize -= 0.5;
+      element.style.fontSize = `${nextSize}px`;
+    }
+    element.title = element.textContent.trim();
+  });
 }
 
 function getEventPoint(event) {
@@ -1090,6 +1118,7 @@ function getEventPoint(event) {
 }
 
 function renderSettingsPage() {
+  app.classList.add("is-page-view");
   const profile = getStoredGmailProfile();
   const displayEmail = profile?.emailAddress || "alex@example.com";
   const displayName = profile ? displayEmail.split("@")[0] : "Alex Chen";
@@ -1215,6 +1244,7 @@ function renderGmailConnectPanel() {
 }
 
 function renderAiPage() {
+  app.classList.add("is-page-view");
   app.innerHTML = `
     <div class="view page ai-page">
       <header class="page-header">
@@ -1433,6 +1463,7 @@ function getAiReply(prompt) {
 }
 
 function renderPage(id) {
+  app.classList.add("is-page-view");
   const page = pages[id];
   const color = modules.find((module) => module.id === id)?.accent || "#2458ff";
   const activeTabIndex = activePageTabs[id] ?? 0;
@@ -1448,7 +1479,7 @@ function renderPage(id) {
         <div class="page-heading">
           <p class="eyebrow">${page.eyebrow}</p>
           <h1 class="page-title">${page.title}</h1>
-          <p class="page-subtitle">${page.subtitle}</p>
+          <p class="page-subtitle fit-one-line">${escapeHtml(page.subtitle)}</p>
         </div>
       </header>
 
@@ -1477,13 +1508,14 @@ function renderPage(id) {
   if (id === "subscriptions") {
     setupSubscriptionButtons();
   }
+  fitOneLineText();
 }
 
 function renderMetric(page, color, metric = page.metric) {
   return `
     <section class="hero-metric">
       <strong class="metric-value" style="color: ${color}">${escapeHtml(metric)}</strong>
-      <p class="metric-copy">${escapeHtml(page.copy)}</p>
+      <p class="metric-copy fit-one-line">${escapeHtml(page.copy)}</p>
     </section>
   `;
 }
@@ -1492,7 +1524,7 @@ function renderRisk(page) {
   return `
     <section class="hero-metric">
       <div class="risk-meter"><strong>${page.metric}</strong><span>High risk</span></div>
-      <p class="metric-copy">${page.copy}</p>
+      <p class="metric-copy fit-one-line">${escapeHtml(page.copy)}</p>
     </section>
   `;
 }
@@ -1544,13 +1576,14 @@ function renderSubscriptionItems(items = []) {
   return `
     <section class="single-stack subscription-stack">
       ${items
-        .map(
-          ([icon, title, subtitle, side, color, mode, url]) => `
-            <article class="item subscription-item" style="--item-color: ${color}">
+        .map(([icon, title, subtitle, side, color, mode, url]) => {
+          const isUnsubscribed = isSubscriptionUnsubscribed(title);
+          return `
+            <article class="item subscription-item${isUnsubscribed ? " is-unsubscribed" : ""}" style="--item-color: ${color}">
               <button
                 class="subscription-stop-button"
                 type="button"
-                aria-label="Check unsubscribe options for ${title}"
+                aria-label="${isUnsubscribed ? `Unsubscribed from ${title}` : `Check unsubscribe options for ${title}`}"
                 aria-expanded="false"
                 data-subscription-source="${escapeAttribute(title)}"
                 data-unsub-mode="${escapeAttribute(mode)}"
@@ -1560,8 +1593,8 @@ function renderSubscriptionItems(items = []) {
               <span class="item-side">${escapeHtml(side)}</span>
               <div class="subscription-unsub-result" aria-live="polite"></div>
             </article>
-          `,
-        )
+          `;
+        })
         .join("")}
     </section>
   `;
@@ -1585,6 +1618,12 @@ function showSubscriptionUnsubscribeFlow(button) {
   item.classList.add("has-result");
   button.setAttribute("aria-expanded", "true");
 
+  if (isSubscriptionUnsubscribed(source)) {
+    item.classList.add("is-unsubscribed");
+    result.innerHTML = renderSubscriptionUnsubscribeSuccess(source);
+    return;
+  }
+
   if (mode === "one-click") {
     result.innerHTML = `
       <strong>Original email checked.</strong>
@@ -1592,11 +1631,10 @@ function showSubscriptionUnsubscribeFlow(button) {
       <button class="subscription-confirm-button" type="button">One-click unsubscribe</button>
     `;
     result.querySelector(".subscription-confirm-button").addEventListener("click", () => {
+      markSubscriptionUnsubscribed(source);
       item.classList.add("is-unsubscribed");
-      result.innerHTML = `
-        <strong>Unsubscribe request sent.</strong>
-        <span>Future emails from ${source} will stop when the sender confirms it.</span>
-      `;
+      button.setAttribute("aria-label", `Unsubscribed from ${source}`);
+      result.innerHTML = renderSubscriptionUnsubscribeSuccess(source);
     });
     return;
   }
@@ -1608,6 +1646,45 @@ function showSubscriptionUnsubscribeFlow(button) {
       ${url}
     </a>
   `;
+}
+
+function renderSubscriptionUnsubscribeSuccess(source) {
+  return `
+    <strong>Unsubscribe successful.</strong>
+    <span>${escapeHtml(source)} is marked as unsubscribed. 1Mail will not offer this action again for this sender.</span>
+  `;
+}
+
+function getSubscriptionUnsubscribeKey(source = "") {
+  return source.trim().toLowerCase();
+}
+
+function isSubscriptionUnsubscribed(source) {
+  return unsubscribedSubscriptionKeys.has(getSubscriptionUnsubscribeKey(source));
+}
+
+function markSubscriptionUnsubscribed(source) {
+  const key = getSubscriptionUnsubscribeKey(source);
+  if (!key) return;
+  unsubscribedSubscriptionKeys.add(key);
+  saveUnsubscribedSubscriptionKeys();
+}
+
+function loadUnsubscribedSubscriptionKeys() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SUBSCRIPTION_UNSUBSCRIBED_STORAGE_KEY) || "[]");
+    return new Set(Array.isArray(stored) ? stored : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveUnsubscribedSubscriptionKeys() {
+  try {
+    localStorage.setItem(SUBSCRIPTION_UNSUBSCRIBED_STORAGE_KEY, JSON.stringify([...unsubscribedSubscriptionKeys]));
+  } catch {
+    // Local storage can be unavailable in private or restricted browser contexts.
+  }
 }
 
 function renderTodayContent(tabView = {}) {

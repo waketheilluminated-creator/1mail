@@ -67,6 +67,10 @@ button {
   -webkit-user-select: none;
 }
 
+.screen.is-page-view {
+  touch-action: pan-y;
+}
+
 @media (max-width: 540px) {
   body {
     display: block;
@@ -105,7 +109,7 @@ button {
   inset: 0;
   display: flex;
   flex-direction: column;
-  padding: max(42px, env(safe-area-inset-top)) 22px max(22px, env(safe-area-inset-bottom));
+  padding: max(42px, env(safe-area-inset-top)) clamp(16px, 5.2vw, 22px) max(22px, env(safe-area-inset-bottom));
 }
 
 .home-view {
@@ -130,7 +134,7 @@ button {
 .eyebrow {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: clamp(10px, 2.9vw, 12px);
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -143,7 +147,7 @@ p {
 }
 
 .title {
-  font-size: 24px;
+  font-size: clamp(22px, 5.7vw, 24px);
   font-weight: 760;
   letter-spacing: 0;
 }
@@ -398,8 +402,8 @@ p {
   top: 50%;
   z-index: 4;
   display: grid;
-  width: 136px;
-  height: 136px;
+  width: clamp(118px, 39%, 136px);
+  aspect-ratio: 1;
   place-items: center;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.34);
@@ -425,8 +429,8 @@ p {
 .center-mark {
   display: grid;
   place-items: center;
-  gap: 7px;
-  width: 116px;
+  gap: clamp(4px, 2.1%, 7px);
+  width: min(84%, 118px);
   line-height: 1.1;
   text-align: center;
 }
@@ -437,21 +441,26 @@ p {
 }
 
 .center-mark strong {
-  max-width: 120px;
+  max-width: 96%;
   overflow: hidden;
-  font-size: var(--label-size, 25px);
+  font-size: clamp(18px, var(--label-size, 25px), 25px);
   font-weight: 780;
   line-height: 1;
   text-overflow: clip;
   white-space: nowrap;
 }
 
-.center-mark span {
-  max-width: 110px;
+.center-hint {
+  display: block;
+  width: min(94%, 116px);
+  max-width: 94%;
   color: rgba(255, 255, 255, 0.68);
-  font-size: 10px;
+  font-size: clamp(8.2px, 2.45vw, 10.5px);
   font-weight: 730;
-  line-height: 1.18;
+  line-height: 1.14;
+  overflow: visible;
+  text-wrap: balance;
+  white-space: normal;
 }
 
 .home-footer {
@@ -628,6 +637,10 @@ p {
 .page {
   gap: 18px;
   background: var(--page-bg, var(--bg));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .page-header {
@@ -638,19 +651,29 @@ p {
 
 .page-heading {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
 .page-title {
-  font-size: 22px;
+  font-size: clamp(20px, 5.3vw, 22px);
   font-weight: 760;
 }
 
 .page-subtitle {
   color: var(--muted);
-  font-size: 13px;
+  font-size: clamp(11px, 3.25vw, 13px);
+  line-height: 1.25;
+}
+
+.fit-one-line {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .settings-page {
@@ -920,6 +943,7 @@ p {
 
 .ai-page {
   gap: 16px;
+  overflow: hidden;
 }
 
 .ai-thread {
@@ -929,7 +953,9 @@ p {
   flex: 1;
   min-height: 0;
   padding-top: 6px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  contain: paint;
 }
 
 .ai-message {
@@ -1166,15 +1192,16 @@ p {
 }
 
 .metric-value {
-  font-size: 46px;
+  font-size: clamp(38px, 11.4vw, 46px);
   font-weight: 790;
   letter-spacing: 0;
 }
 
 .metric-copy {
-  max-width: 280px;
+  width: 100%;
+  max-width: none;
   color: var(--muted);
-  font-size: 15px;
+  font-size: clamp(12px, 3.8vw, 15px);
   line-height: 1.38;
 }
 
@@ -1210,7 +1237,7 @@ p {
   margin: 0;
   padding-left: 18px;
   color: var(--muted);
-  font-size: 15px;
+  font-size: clamp(13px, 3.75vw, 15px);
   font-weight: 520;
   line-height: 1.42;
 }
@@ -1225,11 +1252,11 @@ p {
 
 .item {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: clamp(38px, 10.8vw, 42px) minmax(0, 1fr) auto;
+  gap: clamp(9px, 3vw, 12px);
   align-items: center;
   min-height: 76px;
-  padding: 12px;
+  padding: clamp(10px, 3vw, 12px);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.78);
@@ -1237,8 +1264,8 @@ p {
 
 .item-icon {
   display: grid;
-  width: 42px;
-  height: 42px;
+  width: clamp(38px, 10.8vw, 42px);
+  height: clamp(38px, 10.8vw, 42px);
   place-items: center;
   border-radius: 50%;
   color: var(--item-color, var(--blue));
@@ -1261,7 +1288,7 @@ p {
 
 .item-main strong {
   overflow: hidden;
-  font-size: 15px;
+  font-size: clamp(13px, 3.75vw, 15px);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1269,14 +1296,14 @@ p {
 .item-main span {
   overflow: hidden;
   color: var(--muted);
-  font-size: 12px;
+  font-size: clamp(10.5px, 3vw, 12px);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .item-side {
   color: var(--ink);
-  font-size: 14px;
+  font-size: clamp(12px, 3.5vw, 14px);
   font-weight: 740;
 }
 
@@ -1329,14 +1356,18 @@ p {
   width: 42px;
   height: 42px;
   place-items: center;
+  padding: 0;
   border-radius: 50%;
   background: color-mix(in srgb, var(--red) 11%, #ffffff);
   color: var(--red);
+  line-height: 0;
 }
 
 .subscription-stop-button .stop-hand-icon {
+  display: block;
   width: 38px;
   height: 38px;
+  object-fit: contain;
 }
 
 .subscription-stop-button:active {
@@ -1517,7 +1548,7 @@ p {
   padding: 0 8px;
   background: transparent;
   color: var(--muted);
-  font-size: 13px;
+  font-size: clamp(10.5px, 3.2vw, 13px);
   font-weight: 730;
   letter-spacing: 0;
   white-space: nowrap;
@@ -1711,24 +1742,47 @@ p {
 
   .center-control {
     width: 124px;
-    height: 124px;
   }
 
   .center-mark {
-    width: 106px;
+    width: min(84%, 106px);
   }
 
   .center-mark strong {
-    max-width: 102px;
+    max-width: 96%;
     font-size: min(var(--label-size, 23px), 23px);
   }
 
-  .center-mark span {
-    max-width: 96px;
-    font-size: 9.5px;
+  .center-hint {
+    width: min(94%, 104px);
+    max-width: 94%;
+    font-size: clamp(8px, 2.35vw, 9.8px);
   }
 
   .metric-value {
     font-size: 40px;
+  }
+
+  .ai-page {
+    gap: 10px;
+  }
+
+  .ai-thread {
+    gap: 9px;
+    padding-top: 2px;
+  }
+
+  .ai-suggestions {
+    gap: 6px;
+  }
+
+  .ai-suggestions button {
+    min-height: 36px;
+    font-size: 12px;
+  }
+
+  .ai-composer input,
+  .ai-composer button {
+    height: 44px;
   }
 }
