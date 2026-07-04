@@ -54,5 +54,6 @@
 
 - Treat marketing words such as sale, save, discount, deal, shop now, and up to as negative bill signals.
 - Classify as a bill only when stronger evidence exists, such as invoice, receipt, amount due, paid invoice, order confirmation, renewal, billing cycle, or e-transfer wording.
+- Classify as a meeting only when the email includes a real calendar invite signal, such as a `text/calendar` MIME part or `.ics` file from Google Calendar, Apple Calendar, or another calendar system.
 - Keep the classifier reason local with the digest so the user can review why a message appeared in a tab.
 - When a listing is shown, preserve a source message ID so the user can inspect the original sender, body text, and attachment names.

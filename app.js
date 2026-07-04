@@ -2326,6 +2326,7 @@ function normalizeGmailMessage(message) {
   const date = new Date(internalDate || Date.parse(headers.date || "") || Date.now());
   const bodyText = extractGmailBodyText(message.payload).slice(0, GMAIL_BODY_TEXT_LIMIT);
   const attachmentNames = getGmailAttachmentNames(message.payload);
+  const calendarInvite = getGmailCalendarInviteInfo(headers, message.payload);
 
   return {
     id: message.id,
@@ -2344,6 +2345,7 @@ function normalizeGmailMessage(message) {
     listUnsubscribe: headers["list-unsubscribe"] || "",
     listUnsubscribePost: headers["list-unsubscribe-post"] || "",
     attachmentNames,
+    calendarInvite,
   };
 }
 
@@ -2378,6 +2380,55 @@ function getGmailAttachmentNames(payload) {
     .map((part) => normalizeWhitespace(part.filename || ""))
     .filter(Boolean);
   return [...new Set(names)];
+}
+
+function getGmailCalendarInviteInfo(headers, payload) {
+  const parts = flattenGmailPayload(payload);
+  let hasCalendarPart = false;
+  let hasIcsAttachment = false;
+  let method = "";
+  let provider = "";
+  const calendarText = [];
+
+  parts.forEach((part) => {
+    const mimeType = String(part.mimeType || "").toLowerCase();
+    const filename = String(part.filename || "").toLowerCase();
+    const partHeaders = getHeaderMap(part.headers || []);
+    const contentType = String(partHeaders["content-type"] || "").toLowerCase();
+    const isCalendarPart = mimeType.includes("text/calendar") || contentType.includes("text/calendar");
+    const isIcsAttachment = filename.endsWith(".ics");
+
+    if (!isCalendarPart && !isIcsAttachment) return;
+
+    hasCalendarPart = hasCalendarPart || isCalendarPart;
+    hasIcsAttachment = hasIcsAttachment || isIcsAttachment;
+
+    const methodMatch = contentType.match(/method="?([^";\s]+)/i);
+    if (methodMatch?.[1] && !method) method = methodMatch[1].toLowerCase();
+
+    if (part.body?.data) {
+      const decoded = decodeGmailBase64Text(part.body.data);
+      calendarText.push(decoded);
+      const decodedMethod = decoded.match(/^METHOD:([A-Z]+)/im);
+      if (decodedMethod?.[1] && !method) method = decodedMethod[1].toLowerCase();
+    }
+  });
+
+  const headerText = `${headers.from || ""} ${headers.subject || ""}`.toLowerCase();
+  const inviteText = calendarText.join("\n").toLowerCase();
+  if (headerText.includes("calendar-notification@google.com") || inviteText.includes("prodid:-//google inc//google calendar")) {
+    provider = "google";
+  } else if (headerText.includes("icloud.com") || inviteText.includes("apple calendar") || inviteText.includes("prodid:-//apple")) {
+    provider = "apple";
+  }
+
+  return {
+    hasInvite: hasCalendarPart || hasIcsAttachment,
+    hasCalendarPart,
+    hasIcsAttachment,
+    method,
+    provider,
+  };
 }
 
 function flattenGmailPayload(payload) {
@@ -2716,18 +2767,55 @@ function isEventMessage(message) {
 
 function isMeetingMessage(message) {
   const text = messageText(message);
-  return includesAny(text, [
+  if (!hasCalendarInvite(message)) return false;
+
+  const hasExplicitMeetingSignal = includesAny(text, [
     "meeting",
-    "invite",
-    "invitation",
     "zoom",
     "google meet",
     "microsoft teams",
     "teams meeting",
+    "webex",
+    "conference call",
     "calendar invitation",
-    "accepted:",
-    "declined:",
   ]);
+  const hasInviteSignal =
+    ["request", "counter", "cancel"].includes(String(message.calendarInvite?.method || "").toLowerCase()) ||
+    includesAny(text, [
+      "invite",
+      "invitation",
+      "updated invitation",
+      "new invitation",
+      "calendar invitation",
+      "organizer",
+      "attendee",
+      "accepted:",
+      "declined:",
+      "tentative:",
+    ]);
+  const looksAppointmentOnly =
+    !hasExplicitMeetingSignal &&
+    includesAny(text, [
+      "appointment",
+      "booking",
+      "reservation",
+      "ticket",
+      "concert",
+      "show",
+      "flight",
+      "hotel",
+      "rental car",
+      "boarding",
+      "check-in",
+      "pickup",
+    ]);
+
+  return (hasExplicitMeetingSignal || hasInviteSignal) && !looksAppointmentOnly;
+}
+
+function hasCalendarInvite(message) {
+  if (message.calendarInvite?.hasInvite) return true;
+  return (message.attachmentNames || []).some((name) => String(name).toLowerCase().endsWith(".ics"));
 }
 
 function isTravelMessage(message) {
