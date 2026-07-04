@@ -393,6 +393,7 @@ let dragState = null;
 let suppressCenterClick = false;
 const activePageTabs = {};
 const SUBSCRIPTION_UNSUBSCRIBED_STORAGE_KEY = "oneMailUnsubscribedSenders";
+const USER_NOTICE_STORAGE_KEY = "oneMailUserNoticeAccepted";
 const unsubscribedSubscriptionKeys = loadUnsubscribedSubscriptionKeys();
 
 const aiSuggestions = [
@@ -2157,6 +2158,51 @@ function renderActions(actions = []) {
   `;
 }
 
+function showFirstRunNoticeIfNeeded() {
+  if (hasAcceptedUserNotice() || document.querySelector(".user-notice-overlay")) return;
+
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `
+      <div class="user-notice-overlay" role="dialog" aria-modal="true" aria-labelledby="userNoticeTitle">
+        <section class="user-notice-card">
+          <p class="eyebrow">Before you begin</p>
+          <h2 id="userNoticeTitle">用户须知</h2>
+          <p class="user-notice-lede">1Mail 会认真对待你的邮箱隐私。</p>
+          <ul class="user-notice-list">
+            <li>我们不会出售、共享或泄露你的个人信息。</li>
+            <li>我们不会打开或读取邮件附件内容。</li>
+            <li>我们只会阅读邮件中的文字内容，用来分类、提醒和摘要。</li>
+            <li>附件只会显示文件名，不会读取 actual attachments。</li>
+          </ul>
+          <button class="user-notice-accept" type="button" data-user-notice-accept>我已了解</button>
+        </section>
+      </div>
+    `,
+  );
+
+  document.querySelector("[data-user-notice-accept]").addEventListener("click", () => {
+    markUserNoticeAccepted();
+    document.querySelector(".user-notice-overlay")?.remove();
+  });
+}
+
+function hasAcceptedUserNotice() {
+  try {
+    return localStorage.getItem(USER_NOTICE_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function markUserNoticeAccepted() {
+  try {
+    localStorage.setItem(USER_NOTICE_STORAGE_KEY, "true");
+  } catch {
+    // Keep the app usable even if local storage is restricted.
+  }
+}
+
 function openRoute(nextRoute) {
   route = nextRoute;
   render();
@@ -3492,6 +3538,7 @@ function base64Url(bytes) {
 applyStoredGmailDigest();
 setupGmailOAuthRedirectListener();
 render();
+showFirstRunNoticeIfNeeded();
 window.setTimeout(() => {
   if (getStoredGmailToken()) processLatestWeekGmail({ silent: true });
 }, 450);
