@@ -386,7 +386,7 @@ const billCancelGuides = {
 const GMAIL_SYNC_QUERY = "newer_than:7d";
 const GMAIL_SYNC_BATCH_SIZE = 100;
 const GMAIL_SYNC_MAX_MESSAGES = 200;
-const GMAIL_BODY_TEXT_LIMIT = 12000;
+const GMAIL_BODY_TEXT_LIMIT = 50000;
 
 let route = "home";
 let dragState = null;
@@ -1081,9 +1081,9 @@ function setWheelFocus(moduleId, mode = "idle") {
 
 function getCenterLabelSize(label) {
   const length = label.length;
-  if (length > 12) return "16px";
-  if (length > 9) return "19px";
-  if (length > 7) return "22px";
+  if (length > 12) return "15px";
+  if (length > 9) return "18px";
+  if (length > 7) return "20px";
   return "25px";
 }
 
@@ -1508,6 +1508,7 @@ function renderPage(id) {
   if (id === "subscriptions") {
     setupSubscriptionButtons();
   }
+  setupMailDetailCards();
   fitOneLineText();
 }
 
@@ -1552,20 +1553,49 @@ function renderTabs(pageId, tabs) {
   `;
 }
 
+function getItemMeta(item = []) {
+  const last = item[item.length - 1];
+  return last && typeof last === "object" && !Array.isArray(last) ? last : {};
+}
+
+function getItemMessageId(item = []) {
+  return getItemMeta(item).messageId || "";
+}
+
+function createMailItemMeta(message, extra = {}) {
+  return {
+    ...extra,
+    messageId: message.id,
+  };
+}
+
+function getMailDetailAttributes(item = [], label = "email") {
+  const messageId = getItemMessageId(item);
+  if (!messageId) return "";
+  return [
+    `data-mail-detail="${escapeAttribute(messageId)}"`,
+    `role="button"`,
+    `tabindex="0"`,
+    `aria-label="Open original email for ${escapeAttribute(label)}"`,
+  ].join(" ");
+}
+
 function renderItems(items = []) {
   if (!items.length) return renderEmptyState("Nothing matched here from the latest week.");
   return `
     <section class="single-stack">
       ${items
-        .map(
-          ([icon, title, subtitle, side, color]) => `
-            <article class="item" style="--item-color: ${color}">
+        .map((item) => {
+          const [icon, title, subtitle, side, color] = item;
+          const detailAttr = getMailDetailAttributes(item, title);
+          return `
+            <article class="item${detailAttr ? " mail-detail-card" : ""}" style="--item-color: ${color}" ${detailAttr}>
               <span class="item-icon">${icons[icon]}</span>
               <span class="item-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(subtitle)}</span></span>
               <span class="item-side">${escapeHtml(side)}</span>
             </article>
-          `,
-        )
+          `;
+        })
         .join("")}
     </section>
   `;
@@ -1576,10 +1606,12 @@ function renderSubscriptionItems(items = []) {
   return `
     <section class="single-stack subscription-stack">
       ${items
-        .map(([icon, title, subtitle, side, color, mode, url]) => {
+        .map((item) => {
+          const [icon, title, subtitle, side, color, mode, url] = item;
           const isUnsubscribed = isSubscriptionUnsubscribed(title);
+          const detailAttr = getMailDetailAttributes(item, title);
           return `
-            <article class="item subscription-item${isUnsubscribed ? " is-unsubscribed" : ""}" style="--item-color: ${color}">
+            <article class="item subscription-item${isUnsubscribed ? " is-unsubscribed" : ""}${detailAttr ? " mail-detail-card" : ""}" style="--item-color: ${color}" ${detailAttr}>
               <button
                 class="subscription-stop-button"
                 type="button"
@@ -1602,7 +1634,10 @@ function renderSubscriptionItems(items = []) {
 
 function setupSubscriptionButtons() {
   document.querySelectorAll(".subscription-stop-button").forEach((button) => {
-    button.addEventListener("click", () => showSubscriptionUnsubscribeFlow(button));
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      showSubscriptionUnsubscribeFlow(button);
+    });
   });
 }
 
@@ -1700,12 +1735,19 @@ function renderTodayContent(tabView = {}) {
 
   if (tabView.meetingItems) {
     return renderReminderItems(
-      tabView.meetingItems.map(([title, subtitle, color]) => ["bell", title, subtitle, "", color]),
+      tabView.meetingItems.map(([title, subtitle, color, meta]) => ["bell", title, subtitle, "", color, meta]),
     );
   }
 
   return renderReminderItems(
-    (tabView.reminderItems || []).map(([title, subtitle, side, color]) => ["bell", title, subtitle, side, color]),
+    (tabView.reminderItems || []).map(([title, subtitle, side, color, meta]) => [
+      "bell",
+      title,
+      subtitle,
+      side,
+      color,
+      meta,
+    ]),
   );
 }
 
@@ -1714,9 +1756,11 @@ function renderReminderItems(items = []) {
   return `
     <section class="single-stack">
       ${items
-        .map(
-          ([icon, title, subtitle, side, color]) => `
-            <article class="item reminder-item" style="--item-color: ${color}">
+        .map((item) => {
+          const [icon, title, subtitle, side, color] = item;
+          const detailAttr = getMailDetailAttributes(item, title);
+          return `
+            <article class="item reminder-item${detailAttr ? " mail-detail-card" : ""}" style="--item-color: ${color}" ${detailAttr}>
               <button
                 class="reminder-bell-button"
                 type="button"
@@ -1729,8 +1773,8 @@ function renderReminderItems(items = []) {
               ${side ? `<span class="item-side">${escapeHtml(side)}</span>` : ""}
               <p class="reminder-calendar-status" role="status" aria-live="polite"></p>
             </article>
-          `,
-        )
+          `;
+        })
         .join("")}
     </section>
   `;
@@ -1738,7 +1782,8 @@ function renderReminderItems(items = []) {
 
 function setupReminderButtons() {
   document.querySelectorAll(".reminder-bell-button").forEach((button) => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
       const title = button.dataset.calendarTitle;
       const time = button.dataset.calendarTime;
       button.setAttribute("aria-pressed", "true");
@@ -1909,13 +1954,17 @@ function renderBillItems(items = []) {
   return `
     <section class="single-stack bill-stack">
       ${items
-        .map(([icon, title, subtitle, side, color]) => {
+        .map((item) => {
+          const [icon, title, subtitle, side, color] = item;
           const guideId = getBillGuideId(title);
-          const guideAttr = guideId ? `data-bill-card="${guideId}"` : "";
-          const actionAttr = guideId ? `role="button" tabindex="0" aria-label="Show cancellation steps for ${title}"` : "";
+          const guideAttr = guideId ? `data-bill-guide="${guideId}"` : "";
+          const detailAttr = getMailDetailAttributes(item, title);
+          const iconMarkup = guideId
+            ? `<button class="bill-stop-button" type="button" data-bill-card="${guideId}" aria-label="Show cancellation steps for ${escapeAttribute(title)}">${icons.stopHand}</button>`
+            : renderBillIcon(icon);
           return `
-            <article class="item bill-item${guideId ? " is-guide-trigger" : ""}" style="--item-color: ${color}" ${guideAttr} ${actionAttr}>
-              ${renderBillIcon(icon)}
+            <article class="item bill-item${detailAttr ? " mail-detail-card" : ""}" style="--item-color: ${color}" ${guideAttr} ${detailAttr}>
+              ${iconMarkup}
               <span class="item-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(subtitle)}</span></span>
               <span class="bill-side">
                 <span class="item-side">${escapeHtml(side)}</span>
@@ -1931,14 +1980,21 @@ function renderBillItems(items = []) {
 
 function setupBillCancelButtons() {
   document.querySelectorAll("[data-bill-cancel]").forEach((button) => {
-    button.addEventListener("click", () => showBillCancelGuide(button.dataset.billCancel));
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      showBillCancelGuide(button.dataset.billCancel);
+    });
   });
-  document.querySelectorAll("[data-bill-card]").forEach((card) => {
-    card.addEventListener("click", () => showBillCancelGuide(card.dataset.billCard));
-    card.addEventListener("keydown", (event) => {
+  document.querySelectorAll("[data-bill-card]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      showBillCancelGuide(button.dataset.billCard);
+    });
+    button.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
         event.preventDefault();
-        showBillCancelGuide(card.dataset.billCard);
+        event.stopPropagation();
+        showBillCancelGuide(button.dataset.billCard);
       }
     });
   });
@@ -1953,7 +2009,7 @@ function showBillCancelGuide(guideId) {
     card.querySelector(".bill-cancel-result").replaceChildren();
   });
 
-  const card = document.querySelector(`[data-bill-card="${guideId}"]`);
+  const card = document.querySelector(`[data-bill-guide="${guideId}"]`);
   const result = card?.querySelector(".bill-cancel-result");
   if (!card || !result) return;
 
@@ -1983,17 +2039,100 @@ function renderTimeline(items = []) {
   return `
     <section class="timeline">
       ${items
-        .map(
-          ([time, title, subtitle]) => `
-            <article class="timeline-item">
+        .map((item) => {
+          const [time, title, subtitle] = item;
+          const detailAttr = getMailDetailAttributes(item, title);
+          return `
+            <article class="timeline-item${detailAttr ? " mail-detail-card" : ""}" ${detailAttr}>
               <span>${escapeHtml(time)}</span>
               <strong>${escapeHtml(title)}</strong>
               <span>${escapeHtml(subtitle)}</span>
             </article>
-          `,
-        )
+          `;
+        })
         .join("")}
     </section>
+  `;
+}
+
+function setupMailDetailCards() {
+  document.querySelectorAll("[data-mail-detail]").forEach((card) => {
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, .bill-cancel-result, .subscription-unsub-result")) return;
+      showMailDetail(card.dataset.mailDetail);
+    });
+    card.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      showMailDetail(card.dataset.mailDetail);
+    });
+  });
+}
+
+function showMailDetail(messageId) {
+  const message = getStoredMessageById(messageId);
+  if (!message) return;
+
+  document.querySelector(".mail-detail-overlay")?.remove();
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `
+      <div class="mail-detail-overlay" role="dialog" aria-modal="true" aria-labelledby="mailDetailTitle">
+        <section class="mail-detail-sheet">
+          <header class="mail-detail-header">
+            <span id="mailDetailTitle">Original email</span>
+            <button class="mail-detail-close" type="button" data-mail-detail-close>Close</button>
+          </header>
+          <div class="mail-detail-block">
+            <span>Sender</span>
+            <strong>${escapeHtml(message.from || message.senderEmail || message.senderName || "Unknown sender")}</strong>
+          </div>
+          <div class="mail-detail-block">
+            <span>Full text</span>
+            <pre>${escapeHtml(getMessageFullText(message))}</pre>
+          </div>
+          <div class="mail-detail-block">
+            <span>Attachments</span>
+            ${renderAttachmentNames(message.attachmentNames)}
+          </div>
+        </section>
+      </div>
+    `,
+  );
+
+  const overlay = document.querySelector(".mail-detail-overlay");
+  const closeDetail = () => {
+    overlay.remove();
+    window.removeEventListener("keydown", closeOnEscape);
+  };
+  const closeOnEscape = (event) => {
+    if (event.key !== "Escape") return;
+    closeDetail();
+  };
+  overlay.querySelector("[data-mail-detail-close]").addEventListener("click", closeDetail);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) closeDetail();
+  });
+  window.addEventListener("keydown", closeOnEscape);
+}
+
+function getStoredMessageById(messageId) {
+  const digest = getStoredGmailDigest();
+  return (digest?.messages || []).find((message) => message.id === messageId) || null;
+}
+
+function getMessageFullText(message) {
+  const bodyText = normalizeWhitespace(message.bodyText || "");
+  if (bodyText) return bodyText;
+  return normalizeWhitespace(message.snippet || "No readable body text was captured for this email.");
+}
+
+function renderAttachmentNames(names = []) {
+  if (!names.length) return `<p class="mail-detail-empty">No attachments found.</p>`;
+  return `
+    <ul class="mail-detail-attachments">
+      ${names.map((name) => `<li>${escapeHtml(name)}</li>`).join("")}
+    </ul>
   `;
 }
 
@@ -2186,6 +2325,7 @@ function normalizeGmailMessage(message) {
   const internalDate = Number(message.internalDate || 0);
   const date = new Date(internalDate || Date.parse(headers.date || "") || Date.now());
   const bodyText = extractGmailBodyText(message.payload).slice(0, GMAIL_BODY_TEXT_LIMIT);
+  const attachmentNames = getGmailAttachmentNames(message.payload);
 
   return {
     id: message.id,
@@ -2203,6 +2343,7 @@ function normalizeGmailMessage(message) {
     senderDomain: sender.domain,
     listUnsubscribe: headers["list-unsubscribe"] || "",
     listUnsubscribePost: headers["list-unsubscribe-post"] || "",
+    attachmentNames,
   };
 }
 
@@ -2230,6 +2371,13 @@ function extractGmailBodyText(payload) {
       .filter(Boolean)
       .join(" "),
   );
+}
+
+function getGmailAttachmentNames(payload) {
+  const names = flattenGmailPayload(payload)
+    .map((part) => normalizeWhitespace(part.filename || ""))
+    .filter(Boolean);
+  return [...new Set(names)];
 }
 
 function flattenGmailPayload(payload) {
@@ -2351,6 +2499,7 @@ function applyGmailDigest(digest) {
         getMessageWhen(message),
         getEventCategory(message),
         "#2458ff",
+        createMailItemMeta(message),
       ]),
     },
     {
@@ -2358,6 +2507,7 @@ function applyGmailDigest(digest) {
         message.senderEmail || message.from || message.senderName,
         getMessageWhen(message),
         "#2458ff",
+        createMailItemMeta(message),
       ]),
     },
   ];
@@ -2444,6 +2594,7 @@ function buildSubscriptionViews(messages) {
       "#d64242",
       getUnsubscribeMode(message),
       url,
+      createMailItemMeta(message),
     ]);
   });
 
@@ -2463,6 +2614,7 @@ function buildBillViews(messages) {
         receiver.emailLocal || message.senderEmail.split("@")[0] || message.senderName,
         formatMoney(getMessageAmount(message)),
         "#d64242",
+        createMailItemMeta(message),
       ];
     }),
     oneTime: messages.filter(isOneTimePurchaseMessage).slice(0, 8).map((message) => [
@@ -2471,6 +2623,7 @@ function buildBillViews(messages) {
       `From ${message.senderName}`,
       getFinanceSideLabel(message),
       "#0d8a61",
+      createMailItemMeta(message),
     ]),
     recurring: messages.filter(isRecurringBillMessage).slice(0, 8).map((message) => [
       "stopHand",
@@ -2478,6 +2631,7 @@ function buildBillViews(messages) {
       getBillSubtitle(message),
       getFinanceSideLabel(message),
       "#d64242",
+      createMailItemMeta(message),
     ]),
   };
 }
@@ -2489,6 +2643,7 @@ function buildInboxItems(messages) {
     message.subject,
     getMessageTone(message),
     getToneColor(message),
+    createMailItemMeta(message),
   ]);
 }
 
@@ -2496,11 +2651,11 @@ function buildCalendarViews(events, messages) {
   const appointments = events
     .filter((message) => !isTravelMessage(message))
     .slice(0, 8)
-    .map((message) => [getMessageWhen(message), getEventTitle(message), message.senderName]);
+    .map((message) => [getMessageWhen(message), getEventTitle(message), message.senderName, createMailItemMeta(message)]);
   const travel = messages
     .filter(isTravelMessage)
     .slice(0, 8)
-    .map((message) => [getMessageWhen(message), getEventTitle(message), message.senderName]);
+    .map((message) => [getMessageWhen(message), getEventTitle(message), message.senderName, createMailItemMeta(message)]);
 
   return {
     appointments,
@@ -2518,6 +2673,7 @@ function buildSecurityItems(messages) {
       message.senderDomain || message.senderEmail || message.senderName,
       "Review",
       "#d64242",
+      createMailItemMeta(message),
     ]),
     riskScore: suspicious.length ? Math.min(94, 50 + suspicious.length * 12) : 12,
   };
@@ -2533,6 +2689,10 @@ function messageContentText(message) {
 
 function includesAny(value, keywords) {
   return keywords.some((keyword) => value.includes(keyword));
+}
+
+function getMatchedKeywords(value, keywords) {
+  return keywords.filter((keyword) => value.includes(keyword));
 }
 
 function isEventMessage(message) {
@@ -2667,64 +2827,302 @@ function getUnsubscribeUrl(message) {
 }
 
 function isETransferMessage(message) {
-  const text = messageText(message);
-  return includesAny(text, ["e-transfer", "etransfer", "interac", "sent you money", "money sent", "sent money"]);
+  return getEmailFinanceUnderstanding(message).kind === "e-transfer";
 }
 
 function isOneTimePurchaseMessage(message) {
-  const text = messageContentText(message);
-  const hasAmount = getMessageAmount(message) > 0;
-  return (
-    !isETransferMessage(message) &&
-    !isRecurringBillMessage(message) &&
-    (hasAmount || includesAny(text, ["invoice", "receipt", "statement", "order", "purchase", "payment due", "amount due"])) &&
-    includesAny(text, [
-      "invoice",
-      "receipt",
-      "statement",
-      "order",
-      "purchase",
-      "payment due",
-      "amount due",
-      "balance due",
-      "paid",
-      "charge",
-      "transaction",
-      "ticket",
-      "concert",
-      "show",
-      "eventbrite",
-      "ticketmaster",
-      "box office",
-    ])
-  );
+  return getEmailFinanceUnderstanding(message).kind === "one-time";
 }
 
 function isRecurringBillMessage(message) {
-  const text = messageText(message);
-  return (
-    !isETransferMessage(message) &&
-    includesAny(text, [
-      "subscription",
-      "renewal",
-      "renews",
-      "monthly",
-      "annual",
-      "membership",
-      "plan renew",
-      "billing cycle",
-      "recurring charge",
-      "auto-renew",
-      "autorenew",
-    ])
-  );
+  return getEmailFinanceUnderstanding(message).kind === "recurring";
 }
 
 function getMessageAmount(message) {
-  const text = messageContentText(message);
-  const amount = text.match(/(?:CA\$|US\$|USD|CAD|\$)\s*([0-9][0-9,]*(?:\.[0-9]{2})?)/i);
-  if (!amount) return 0;
-  return Number(amount[1].replace(/,/g, "")) || 0;
+  return getEmailFinanceUnderstanding(message).amount;
+}
+
+function getEmailFinanceUnderstanding(message) {
+  const contentText = messageContentText(message);
+  const fullText = messageText(message);
+  const subjectText = String(message.subject || "").toLowerCase();
+  const labelIds = message.labelIds || [];
+  const isGmailPromotion = labelIds.includes("CATEGORY_PROMOTIONS");
+  const transferEvidence = getMatchedKeywords(fullText, [
+    "e-transfer",
+    "etransfer",
+    "interac",
+    "sent you money",
+    "money sent",
+    "sent money",
+    "money transfer",
+  ]);
+  const recurringEvidence = getMatchedKeywords(fullText, [
+    "subscription",
+    "renewal",
+    "renews",
+    "monthly",
+    "annual",
+    "membership",
+    "plan renew",
+    "plan renewal",
+    "renews on",
+    "billing cycle",
+    "recurring charge",
+    "auto-renew",
+    "autorenew",
+    "next billing date",
+  ]);
+  const invoiceEvidence = getMatchedKeywords(contentText, [
+    "invoice notification",
+    "invoice #",
+    "invoice number",
+    "new invoice",
+    "attached invoice",
+    "view invoice",
+    "download invoice",
+    "tax invoice",
+    "payment due",
+    "amount due",
+    "balance due",
+    "bill due",
+  ]);
+  if (subjectText.includes("invoice") && !invoiceEvidence.includes("invoice")) {
+    invoiceEvidence.push("invoice");
+  }
+  const receiptEvidence = getMatchedKeywords(contentText, [
+    "your receipt",
+    "receipt for",
+    "payment receipt",
+    "transaction receipt",
+    "statement",
+    "paid invoice",
+    "payment received",
+    "payment confirmation",
+    "total paid",
+    "charged to",
+  ]);
+  const purchaseEvidence = getMatchedKeywords(contentText, [
+    "order confirmation",
+    "order number",
+    "order #",
+    "thanks for your order",
+    "thank you for your order",
+    "thank you for your purchase",
+    "purchase confirmation",
+    "transaction",
+    "charged",
+    "charge posted",
+    "payment processed",
+    "your order is ready",
+    "your order has shipped",
+    "has shipped",
+  ]);
+  const eventPurchaseEvidence = getMatchedKeywords(contentText, [
+    "ticketmaster",
+    "eventbrite",
+    "box office",
+    "mobile entry",
+    "seat ",
+    "tickets",
+    "show starts",
+    "doors open",
+  ]);
+  const marketingEvidence = getMatchedKeywords(contentText, [
+    "save ",
+    "savings",
+    "discount",
+    "coupon",
+    "promo",
+    "promotion",
+    "offer",
+    "offers",
+    "deal",
+    "deals",
+    "sale",
+    "clearance",
+    "cash back",
+    "cashback",
+    "rewards",
+    "points",
+    "shop now",
+    "limited time",
+    "as low as",
+    "starting at",
+    "up to",
+    "shop now",
+    "buy now",
+    "new arrivals",
+    "today only",
+    "ends soon",
+  ]);
+  const paymentEvidence = [...invoiceEvidence, ...receiptEvidence];
+  const transactionEvidence = [...paymentEvidence, ...purchaseEvidence, ...eventPurchaseEvidence];
+  const hasTransferIntent = transferEvidence.length > 0;
+  const hasTransactionIntent = transactionEvidence.length > 0;
+  const hasRecurringIntent = recurringEvidence.length > 0;
+  const amount = extractChargeAmount(contentText, {
+    hasTransactionIntent: hasTransferIntent || hasTransactionIntent || hasRecurringIntent,
+  });
+  const promotional = isLikelyPromotionalFinanceNoise({
+    amount,
+    isGmailPromotion,
+    marketingEvidence,
+    paymentEvidence,
+    purchaseEvidence,
+    recurringEvidence,
+    transferEvidence,
+  });
+
+  if (hasTransferIntent) {
+    return {
+      amount,
+      confidence: amount > 0 ? 0.88 : 0.72,
+      evidence: transferEvidence,
+      kind: "e-transfer",
+      promotional: false,
+    };
+  }
+
+  if (promotional) {
+    return {
+      amount: 0,
+      confidence: 0.82,
+      evidence: marketingEvidence,
+      kind: "promo",
+      promotional: true,
+    };
+  }
+
+  if (
+    hasRecurringIntent &&
+    !isPromoOnlyFinanceNotice({ amount, isGmailPromotion, marketingEvidence, paymentEvidence }) &&
+    (amount > 0 ||
+      paymentEvidence.length > 0 ||
+      includesAny(contentText, ["renewal", "renews", "billing cycle", "next billing date"]))
+  ) {
+    return {
+      amount,
+      confidence: paymentEvidence.length > 0 || amount > 0 ? 0.84 : 0.68,
+      evidence: [...recurringEvidence, ...paymentEvidence],
+      kind: "recurring",
+      promotional: false,
+    };
+  }
+
+  if (hasTransactionIntent && (amount > 0 || paymentEvidence.length > 0 || eventPurchaseEvidence.length > 0)) {
+    return {
+      amount,
+      confidence: paymentEvidence.length > 0 || amount > 0 ? 0.86 : 0.7,
+      evidence: transactionEvidence,
+      kind: "one-time",
+      promotional: false,
+    };
+  }
+
+  return {
+    amount: 0,
+    confidence: 0.4,
+    evidence: [...transactionEvidence, ...recurringEvidence, ...marketingEvidence],
+    kind: "none",
+    promotional: marketingEvidence.length > 0 || isGmailPromotion,
+  };
+}
+
+function isLikelyPromotionalFinanceNoise({
+  amount,
+  isGmailPromotion,
+  marketingEvidence,
+  paymentEvidence,
+  purchaseEvidence,
+  recurringEvidence,
+  transferEvidence,
+}) {
+  const marketingScore = marketingEvidence.length + (isGmailPromotion ? 2 : 0);
+  const hardFinanceScore =
+    paymentEvidence.length * 3 + purchaseEvidence.length * 2 + recurringEvidence.length * 2 + transferEvidence.length * 3;
+
+  if (marketingScore === 0) return false;
+  if (hardFinanceScore === 0 && amount === 0) return true;
+  return amount === 0 && marketingScore >= hardFinanceScore + 2;
+}
+
+function isPromoOnlyFinanceNotice({ amount, isGmailPromotion, marketingEvidence, paymentEvidence }) {
+  return (marketingEvidence.length > 0 || isGmailPromotion) && amount === 0 && paymentEvidence.length === 0;
+}
+
+function extractChargeAmount(text, { hasTransactionIntent = false } = {}) {
+  const matches = [...text.matchAll(/(?:CA\$|US\$|USD|CAD|\$)\s*([0-9][0-9,]*(?:\.[0-9]{2})?)/gi)];
+  if (!matches.length) return 0;
+
+  const candidates = matches
+    .map((match) => {
+      const before = text.slice(Math.max(0, match.index - 48), match.index);
+      const after = text.slice(match.index + match[0].length, match.index + match[0].length + 48);
+      const context = `${before} ${match[0]} ${after}`;
+      return {
+        amount: Number(match[1].replace(/,/g, "")) || 0,
+        score: getMoneyContextScore(context),
+      };
+    })
+    .filter((candidate) => candidate.amount > 0);
+
+  const positive = candidates.find((candidate) => candidate.score > 0);
+  if (positive) return positive.amount;
+
+  const neutral = candidates.find((candidate) => candidate.score === 0);
+  if (neutral && hasTransactionIntent) return neutral.amount;
+
+  return 0;
+}
+
+function getMoneyContextScore(context) {
+  const positiveContext = [
+    "total",
+    "grand total",
+    "order total",
+    "amount due",
+    "balance due",
+    "payment",
+    "paid",
+    "charged",
+    "charge",
+    "invoice",
+    "receipt",
+    "statement",
+    "subtotal",
+    "tax",
+    "transaction",
+    "sent",
+    "transfer",
+    "e-transfer",
+    "purchase",
+  ];
+  const promoContext = [
+    "save",
+    "savings",
+    "discount",
+    "coupon",
+    "off",
+    "deal",
+    "promo",
+    "promotion",
+    "clearance",
+    "cash back",
+    "cashback",
+    "reward",
+    "points",
+    "as low as",
+    "starting at",
+    "from",
+    "up to",
+    "was",
+    "now",
+    "under",
+  ];
+  const positiveScore = getMatchedKeywords(context, positiveContext).length;
+  const promoScore = getMatchedKeywords(context, promoContext).length;
+  return positiveScore - promoScore;
 }
 
 function formatMoney(value) {

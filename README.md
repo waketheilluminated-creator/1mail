@@ -5,9 +5,17 @@ Static iPhone-first interaction prototype for 1Mail.
 - Radial home hub
 - Thumb drag from the center control to a module
 - Single-purpose mock pages for Today, Bills, Calendar, Security, Subscriptions, and Inbox
-- No real email, OAuth, backend, or data sync
+- Optional Gmail OAuth test connection for processing the latest week of messages locally
+- Local finance classifier with promo exclusion checks for savings/deal emails
+- Tap a generated listing to inspect sender, captured body text, and attachment names from the original email
 
 Open `index.html` directly in a browser, or serve the folder with any static server.
+
+## Privacy note
+
+Email content is sensitive. The current prototype classifies Gmail test messages locally in JavaScript and does not call an outside AI provider. Before adding cloud AI parsing, follow the local-first, consent, redaction, and logging rules in [`docs/email-ai-privacy.md`](docs/email-ai-privacy.md).
+
+The bills classifier now requires finance-specific evidence such as invoice, receipt, amount due, paid, order confirmation, renewal, or e-transfer language. Promotional wording such as save, discount, sale, deal, shop now, and up to is treated as an exclusion signal unless a stronger transaction signal is present.
 
 ## iPhone test build
 
