@@ -393,7 +393,6 @@ let dragState = null;
 let suppressCenterClick = false;
 const activePageTabs = {};
 const SUBSCRIPTION_UNSUBSCRIBED_STORAGE_KEY = "oneMailUnsubscribedSenders";
-const USER_NOTICE_STORAGE_KEY = "oneMailUserNoticeAccepted";
 const unsubscribedSubscriptionKeys = loadUnsubscribedSubscriptionKeys();
 
 const aiSuggestions = [
@@ -1082,8 +1081,8 @@ function setWheelFocus(moduleId, mode = "idle") {
 
 function getCenterLabelSize(label) {
   const length = label.length;
-  if (length > 12) return "15px";
-  if (length > 9) return "18px";
+  if (length > 12) return "14px";
+  if (length > 9) return "17px";
   if (length > 7) return "20px";
   return "25px";
 }
@@ -2090,7 +2089,7 @@ function showMailDetail(messageId) {
           </div>
           <div class="mail-detail-block">
             <span>Full text</span>
-            <pre>${escapeHtml(getMessageFullText(message))}</pre>
+            <div class="mail-detail-text">${renderFormattedEmailText(getMessageFullText(message))}</div>
           </div>
           <div class="mail-detail-block">
             <span>Attachments</span>
@@ -2123,9 +2122,46 @@ function getStoredMessageById(messageId) {
 }
 
 function getMessageFullText(message) {
-  const bodyText = normalizeWhitespace(message.bodyText || "");
+  const bodyText = normalizeEmailLineEndings(message.bodyText || "").trim();
   if (bodyText) return bodyText;
-  return normalizeWhitespace(message.snippet || "No readable body text was captured for this email.");
+  return normalizeEmailLineEndings(message.snippet || "No readable body text was captured for this email.").trim();
+}
+
+function renderFormattedEmailText(value = "") {
+  const text = normalizeEmailLineEndings(value);
+  const urlPattern = /\b(?:https?:\/\/|mailto:)[^\s<>"']+/gi;
+  let cursor = 0;
+  let html = "";
+  for (const match of text.matchAll(urlPattern)) {
+    const rawUrl = match[0];
+    const start = match.index || 0;
+    const { url, trailing } = splitTrailingUrlPunctuation(rawUrl);
+    html += escapeHtml(text.slice(cursor, start));
+    html += renderSafeEmailLink(url);
+    html += escapeHtml(trailing);
+    cursor = start + rawUrl.length;
+  }
+  html += escapeHtml(text.slice(cursor));
+  return html || escapeHtml("No readable body text was captured for this email.");
+}
+
+function splitTrailingUrlPunctuation(rawUrl = "") {
+  let url = rawUrl;
+  let trailing = "";
+  while (/[.,;:!?)]$/.test(url)) {
+    trailing = `${url.slice(-1)}${trailing}`;
+    url = url.slice(0, -1);
+  }
+  return { trailing, url };
+}
+
+function renderSafeEmailLink(url = "") {
+  if (!isSafeEmailUrl(url)) return escapeHtml(url);
+  return `<a href="${escapeAttribute(url)}" target="_blank" rel="noreferrer">${escapeHtml(url)}</a>`;
+}
+
+function isSafeEmailUrl(url = "") {
+  return /^(https?:\/\/|mailto:)/i.test(url);
 }
 
 function renderAttachmentNames(names = []) {
@@ -2156,51 +2192,6 @@ function renderActions(actions = []) {
         .join("")}
     </nav>
   `;
-}
-
-function showFirstRunNoticeIfNeeded() {
-  if (hasAcceptedUserNotice() || document.querySelector(".user-notice-overlay")) return;
-
-  document.body.insertAdjacentHTML(
-    "beforeend",
-    `
-      <div class="user-notice-overlay" role="dialog" aria-modal="true" aria-labelledby="userNoticeTitle">
-        <section class="user-notice-card">
-          <p class="eyebrow">Before you begin</p>
-          <h2 id="userNoticeTitle">用户须知</h2>
-          <p class="user-notice-lede">1Mail 会认真对待你的邮箱隐私。</p>
-          <ul class="user-notice-list">
-            <li>我们不会出售、共享或泄露你的个人信息。</li>
-            <li>我们不会打开或读取邮件附件内容。</li>
-            <li>我们只会阅读邮件中的文字内容，用来分类、提醒和摘要。</li>
-            <li>附件只会显示文件名，不会读取 actual attachments。</li>
-          </ul>
-          <button class="user-notice-accept" type="button" data-user-notice-accept>我已了解</button>
-        </section>
-      </div>
-    `,
-  );
-
-  document.querySelector("[data-user-notice-accept]").addEventListener("click", () => {
-    markUserNoticeAccepted();
-    document.querySelector(".user-notice-overlay")?.remove();
-  });
-}
-
-function hasAcceptedUserNotice() {
-  try {
-    return localStorage.getItem(USER_NOTICE_STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-function markUserNoticeAccepted() {
-  try {
-    localStorage.setItem(USER_NOTICE_STORAGE_KEY, "true");
-  } catch {
-    // Keep the app usable even if local storage is restricted.
-  }
 }
 
 function openRoute(nextRoute) {
@@ -2409,16 +2400,19 @@ function extractGmailBodyText(payload) {
       return !part.filename && part.body?.data && (mimeType === "text/plain" || mimeType === "text/html");
     })
     .sort((left, right) => getGmailMimeScore(left.mimeType) - getGmailMimeScore(right.mimeType));
+  const plainParts = textParts.filter((part) => String(part.mimeType || "").toLowerCase() === "text/plain");
+  const htmlParts = textParts.filter((part) => String(part.mimeType || "").toLowerCase() === "text/html");
+  const selectedParts = plainParts.length ? plainParts : htmlParts;
 
-  return normalizeWhitespace(
-    textParts
-      .map((part) => {
-        const decoded = decodeGmailBase64Text(part.body.data);
-        return String(part.mimeType || "").toLowerCase() === "text/html" ? stripHtml(decoded) : decoded;
-      })
-      .filter(Boolean)
-      .join(" "),
-  );
+  return selectedParts
+    .map((part) => {
+      const decoded = decodeGmailBase64Text(part.body.data);
+      return String(part.mimeType || "").toLowerCase() === "text/html"
+        ? normalizeHtmlEmailText(htmlToReadableText(decoded))
+        : normalizePlainEmailText(decoded);
+    })
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function getGmailAttachmentNames(payload) {
@@ -2504,17 +2498,71 @@ function decodeGmailBase64Text(value = "") {
   }
 }
 
-function stripHtml(value = "") {
-  return String(value)
+function htmlToReadableText(value = "") {
+  const withoutHidden = String(value)
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
+    .replace(/<head[\s\S]*?<\/head>/gi, " ");
+  return decodeHtmlEntities(
+    withoutHidden
+      .replace(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi, (_match, attributes, labelHtml) =>
+        formatReadableHtmlLink(attributes, labelHtml),
+      )
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/(?:p|div|section|article|header|footer|li|tr|table|h[1-6]|blockquote)>/gi, "\n")
+      .replace(/<(?:p|div|section|article|header|footer|li|tr|table|h[1-6]|blockquote)\b[^>]*>/gi, "\n")
+      .replace(/<[^>]+>/g, " "),
+  );
+}
+
+function formatReadableHtmlLink(attributes = "", labelHtml = "") {
+  const href = getHtmlAttribute(attributes, "href");
+  const label = htmlInlineToText(labelHtml);
+  if (!href || !isSafeEmailUrl(href)) return label;
+  if (!label || label === href) return href;
+  return `${label} (${href})`;
+}
+
+function getHtmlAttribute(attributes = "", name = "") {
+  const quoted = attributes.match(new RegExp(`\\b${name}\\s*=\\s*([\"'])(.*?)\\1`, "i"));
+  if (quoted?.[2]) return decodeHtmlEntities(quoted[2].trim());
+  const unquoted = attributes.match(new RegExp(`\\b${name}\\s*=\\s*([^\\s>]+)`, "i"));
+  return decodeHtmlEntities((unquoted?.[1] || "").trim());
+}
+
+function htmlInlineToText(value = "") {
+  return normalizeWhitespace(decodeHtmlEntities(String(value).replace(/<[^>]+>/g, " ")));
+}
+
+function decodeHtmlEntities(value = "") {
+  return String(value)
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&#39;/g, "'")
-    .replace(/&quot;/gi, '"');
+    .replace(/&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCharCode(parseInt(code, 16)));
+}
+
+function normalizeEmailLineEndings(value = "") {
+  return String(value).replace(/\r\n?/g, "\n");
+}
+
+function normalizePlainEmailText(value = "") {
+  return normalizeEmailLineEndings(value)
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .trim();
+}
+
+function normalizeHtmlEmailText(value = "") {
+  return normalizePlainEmailText(value)
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function parseSender(value = "") {
@@ -2792,23 +2840,111 @@ function getMatchedKeywords(value, keywords) {
   return keywords.filter((keyword) => value.includes(keyword));
 }
 
-function isEventMessage(message) {
+function getMarketingEvidence(message) {
   const text = messageText(message);
-  return includesAny(text, [
-    "appointment",
-    "booking",
-    "reservation",
-    "ticket",
-    "concert",
-    "show",
-    "flight",
-    "hotel",
-    "rental car",
-    "check-in",
-    "pickup",
-    "calendar",
-    "event",
+  return getMatchedKeywords(text, [
+    "save ",
+    "savings",
+    "discount",
+    "coupon",
+    "promo",
+    "promotion",
+    "offer",
+    "offers",
+    "deal",
+    "deals",
+    "sale",
+    "clearance",
+    "cash back",
+    "cashback",
+    "rewards",
+    "points",
+    "shop now",
+    "limited time",
+    "as low as",
+    "starting at",
+    "up to",
+    "buy now",
+    "new arrivals",
+    "today only",
+    "ends soon",
+    "on sale",
+    "sale event",
+    "exclusive offer",
   ]);
+}
+
+function isLikelyPromotionalMessage(message) {
+  const labelIds = message.labelIds || [];
+  return Boolean(
+    labelIds.includes("CATEGORY_PROMOTIONS") ||
+      message.listUnsubscribe ||
+      getMarketingEvidence(message).length > 0 ||
+      includesAny(messageText(message), ["unsubscribe", "notification preferences"]),
+  );
+}
+
+function isEventMessage(message) {
+  if (isLikelyPromotionalMessage(message) && !hasStrongEventEvidence(message)) return false;
+  return hasAppointmentEvidence(message) || hasTravelEvidence(message) || hasTicketEvidence(message);
+}
+
+function hasStrongEventEvidence(message) {
+  return hasAppointmentEvidence(message) || hasTravelEvidence(message) || hasTicketEvidence(message);
+}
+
+function hasAppointmentEvidence(message) {
+  const text = messageText(message);
+  return (
+    includesAny(text, ["appointment", "scheduled visit", "confirmed visit"]) &&
+    includesAny(text, ["confirmed", "confirmation", "scheduled", "reminder", "rescheduled", "tomorrow", "today", " at "])
+  );
+}
+
+function hasTravelEvidence(message) {
+  const text = messageText(message);
+  const travelSignal = includesAny(text, [
+    "flight",
+    "airline",
+    "boarding pass",
+    "boarding",
+    "hotel",
+    "check-in",
+    "rental car",
+    "car rental",
+    "pickup",
+  ]);
+  const confirmationSignal = includesAny(text, [
+    "confirmation",
+    "confirmed",
+    "reservation number",
+    "booking reference",
+    "itinerary",
+    "boarding pass",
+    "check-in opens",
+    "mobile entry",
+  ]);
+  return travelSignal && confirmationSignal;
+}
+
+function hasTicketEvidence(message) {
+  const text = messageText(message);
+  const ticketSignal = includesAny(text, ["ticket", "tickets", "concert", "show", "eventbrite", "ticketmaster", "box office"]);
+  const confirmationSignal = includesAny(text, [
+    "receipt",
+    "confirmation",
+    "confirmed",
+    "order confirmation",
+    "order #",
+    "order number",
+    "mobile entry",
+    "seat ",
+    "section ",
+    "row ",
+    "doors open",
+    "show starts",
+  ]);
+  return ticketSignal && confirmationSignal;
 }
 
 function isMeetingMessage(message) {
@@ -2865,8 +3001,7 @@ function hasCalendarInvite(message) {
 }
 
 function isTravelMessage(message) {
-  const text = messageText(message);
-  return includesAny(text, ["flight", "hotel", "airline", "boarding", "check-in", "rental car", "reservation", "booking"]);
+  return hasTravelEvidence(message);
 }
 
 function getEventTitle(message) {
@@ -3053,47 +3188,18 @@ function getEmailFinanceUnderstanding(message) {
     "has shipped",
   ]);
   const eventPurchaseEvidence = getMatchedKeywords(contentText, [
-    "ticketmaster",
-    "eventbrite",
-    "box office",
     "mobile entry",
     "seat ",
-    "tickets",
     "show starts",
     "doors open",
   ]);
-  const marketingEvidence = getMatchedKeywords(contentText, [
-    "save ",
-    "savings",
-    "discount",
-    "coupon",
-    "promo",
-    "promotion",
-    "offer",
-    "offers",
-    "deal",
-    "deals",
-    "sale",
-    "clearance",
-    "cash back",
-    "cashback",
-    "rewards",
-    "points",
-    "shop now",
-    "limited time",
-    "as low as",
-    "starting at",
-    "up to",
-    "shop now",
-    "buy now",
-    "new arrivals",
-    "today only",
-    "ends soon",
-  ]);
+  const marketingEvidence = getMarketingEvidence(message);
   const paymentEvidence = [...invoiceEvidence, ...receiptEvidence];
   const transactionEvidence = [...paymentEvidence, ...purchaseEvidence, ...eventPurchaseEvidence];
   const hasTransferIntent = transferEvidence.length > 0;
-  const hasTransactionIntent = transactionEvidence.length > 0;
+  const hasHardPaymentIntent = paymentEvidence.length > 0 || purchaseEvidence.length > 0;
+  const hasTicketReceiptIntent = eventPurchaseEvidence.length > 0 && hasHardPaymentIntent;
+  const hasTransactionIntent = hasHardPaymentIntent || hasTicketReceiptIntent;
   const hasRecurringIntent = recurringEvidence.length > 0;
   const amount = extractChargeAmount(contentText, {
     hasTransactionIntent: hasTransferIntent || hasTransactionIntent || hasRecurringIntent,
@@ -3131,9 +3237,9 @@ function getEmailFinanceUnderstanding(message) {
   if (
     hasRecurringIntent &&
     !isPromoOnlyFinanceNotice({ amount, isGmailPromotion, marketingEvidence, paymentEvidence }) &&
-    (amount > 0 ||
-      paymentEvidence.length > 0 ||
-      includesAny(contentText, ["renewal", "renews", "billing cycle", "next billing date"]))
+    (paymentEvidence.length > 0 ||
+      (amount > 0 && !isGmailPromotion) ||
+      includesAny(contentText, ["renews on", "next billing date", "billing cycle", "recurring charge"]))
   ) {
     return {
       amount,
@@ -3144,7 +3250,7 @@ function getEmailFinanceUnderstanding(message) {
     };
   }
 
-  if (hasTransactionIntent && (amount > 0 || paymentEvidence.length > 0 || eventPurchaseEvidence.length > 0)) {
+  if (hasTransactionIntent && (amount > 0 || paymentEvidence.length > 0 || purchaseEvidence.length > 0)) {
     return {
       amount,
       confidence: paymentEvidence.length > 0 || amount > 0 ? 0.86 : 0.7,
@@ -3538,7 +3644,6 @@ function base64Url(bytes) {
 applyStoredGmailDigest();
 setupGmailOAuthRedirectListener();
 render();
-showFirstRunNoticeIfNeeded();
 window.setTimeout(() => {
   if (getStoredGmailToken()) processLatestWeekGmail({ silent: true });
 }, 450);
