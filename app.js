@@ -85,14 +85,14 @@ const modules = [
     wheelDescription: "Spoofed senders and unsafe links",
   },
   {
-    id: "inbox",
-    label: "Inbox",
-    icon: "inbox",
+    id: "logins",
+    label: "Logins",
+    icon: "lock",
     accent: "#343a40",
     wheelColor: "#805b38",
     activeWheelColor: "#9a6d43",
     iconColor: "#e5b36e",
-    wheelDescription: "Messages waiting for your action",
+    wheelDescription: "New device sign-ins and login confirmations",
   },
   {
     id: "subscriptions",
@@ -277,6 +277,23 @@ const pages = {
     items: [
       ["alert", "PayPal account notice", "paypal-billing-secure.co", "High", "#d64242"],
       ["shield", "Amazon receipt", "Authenticated sender", "Safe", "#0d8a61"],
+    ],
+  },
+  logins: {
+    eyebrow: "Access",
+    title: "Login notices",
+    subtitle: "New devices and sign-ins",
+    metric: "2",
+    copy: "Review the door, then clear the hallway.",
+    pills: ["New device", "Sign-in", "Verification"],
+    actions: [
+      ["Delete", "trash", "", null],
+      ["Preview", "eye", "secondary", null],
+      ["Done", "check", "secondary", null],
+    ],
+    items: [
+      ["lock", "New Google sign-in", "Remote device confirmation", "Delete", "#343a40"],
+      ["shield", "Apple ID verification", "Sign-in confirmation", "Delete", "#343a40"],
     ],
   },
   subscriptions: {
@@ -1220,8 +1237,12 @@ function renderGmailConnectPanel() {
         ? `Connected as ${profile.emailAddress}. Process the latest week to update the app.`
         : "Gmail is not connected yet.");
   const buttonLabel = profile ? "Reconnect Gmail" : "Connect Gmail";
+  const aiConfig = getAiParserConfig();
+  const aiCopy = isAiParserConfigured(aiConfig)
+    ? ` Cloud AI parser: ${aiConfig.endpoint}.`
+    : " Cloud AI parser is off.";
   const detail = isConfigured
-    ? "Uses Google OAuth with read-only Gmail access for prototype testing."
+    ? `Uses Google OAuth with Gmail read/modify access for prototype testing.${aiCopy}`
     : "Add your Google iOS OAuth client ID in oauth-config.js before testing on iPhone.";
   const processButton = profile
     ? `<button class="gmail-process-button" type="button" data-gmail-process>Process latest week</button>`
@@ -1485,7 +1506,7 @@ function renderPage(id) {
 
       ${id === "security" ? renderRisk(page) : renderMetric(page, color, metric)}
       ${renderTabs(id, page.pills)}
-      ${id === "today" ? renderTodayContent(tabView) : id === "bills" ? renderBillItems(items) : id === "subscriptions" ? renderSubscriptionItems(items) : timeline ? renderTimeline(timeline) : renderItems(items)}
+      ${id === "today" ? renderTodayContent(tabView) : id === "bills" ? renderBillItems(items) : id === "subscriptions" ? renderSubscriptionItems(items) : id === "logins" ? renderLoginItems(items) : timeline ? renderTimeline(timeline) : renderItems(items)}
     </div>
   `;
 
@@ -1507,6 +1528,9 @@ function renderPage(id) {
   }
   if (id === "subscriptions") {
     setupSubscriptionButtons();
+  }
+  if (id === "logins") {
+    setupLoginCleanupButtons();
   }
   setupMailDetailCards();
   fitOneLineText();
@@ -1599,6 +1623,71 @@ function renderItems(items = []) {
         .join("")}
     </section>
   `;
+}
+
+function renderLoginItems(items = []) {
+  if (!items.length) return renderEmptyState("No login confirmations matched the latest week.");
+  return `
+    <section class="single-stack login-stack">
+      ${items
+        .map((item) => {
+          const [icon, title, subtitle, side, color] = item;
+          const messageId = getItemMessageId(item);
+          const detailAttr = getMailDetailAttributes(item, title);
+          return `
+            <article class="item login-item${detailAttr ? " mail-detail-card" : ""}" style="--item-color: ${color}" ${detailAttr}>
+              <span class="item-icon">${icons[icon]}</span>
+              <span class="item-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(subtitle)}</span></span>
+              <button
+                class="login-delete-button"
+                type="button"
+                data-login-delete="${escapeAttribute(messageId)}"
+                aria-label="Move ${escapeAttribute(title)} to Trash"
+              >
+                ${icons.trash}
+                <span>${escapeHtml(side || "Delete")}</span>
+              </button>
+              <p class="login-delete-status" role="status" aria-live="polite"></p>
+            </article>
+          `;
+        })
+        .join("")}
+    </section>
+  `;
+}
+
+function setupLoginCleanupButtons() {
+  document.querySelectorAll("[data-login-delete]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      cleanupLoginMessage(button);
+    });
+  });
+}
+
+async function cleanupLoginMessage(button) {
+  const messageId = button.dataset.loginDelete;
+  const item = button.closest(".login-item");
+  const status = item?.querySelector(".login-delete-status");
+  if (!messageId || !status) return;
+
+  button.disabled = true;
+  item.classList.add("is-deleting");
+  status.textContent = "Moving to Trash...";
+
+  try {
+    await trashGmailMessage(messageId);
+    status.textContent = "Moved to Trash.";
+    item.classList.add("is-deleted");
+    window.setTimeout(() => {
+      removeMessageFromStoredDigest(messageId);
+      renderPage("logins");
+    }, 420);
+  } catch (error) {
+    button.disabled = false;
+    item.classList.remove("is-deleting");
+    status.textContent = error.message;
+  }
 }
 
 function renderSubscriptionItems(items = []) {
@@ -2209,6 +2298,10 @@ function getGmailConfig() {
   return window.ONE_MAIL_CONFIG?.gmail || {};
 }
 
+function getAiParserConfig() {
+  return window.ONE_MAIL_CONFIG?.aiParser || {};
+}
+
 function isGmailConfigured(config = getGmailConfig()) {
   return Boolean(
     config.clientId &&
@@ -2216,6 +2309,10 @@ function isGmailConfigured(config = getGmailConfig()) {
       !config.clientId.includes("PASTE_IOS_CLIENT_ID") &&
       !config.redirectUri.includes("PASTE_IOS_CLIENT_ID"),
   );
+}
+
+function isAiParserConfigured(config = getAiParserConfig()) {
+  return Boolean(config.enabled && config.endpoint);
 }
 
 function getStoredGmailProfile() {
@@ -2256,7 +2353,14 @@ async function processLatestWeekGmail(options = {}) {
   try {
     if (!silent) setGmailConnectStatus("Processing the latest week of Gmail...");
     const token = accessToken || (await getValidGmailAccessToken());
-    const messages = await fetchLatestWeekGmailMessages(token);
+    let messages = await fetchLatestWeekGmailMessages(token);
+    try {
+      messages = await enrichMessagesWithCloudAi(messages, { silent });
+    } catch (aiError) {
+      if (!silent) {
+        setGmailConnectStatus(`Cloud AI parser unavailable, using local rules: ${aiError.message}`);
+      }
+    }
     const digest = buildGmailDigest(messages);
     localStorage.setItem("oneMailGmailDigest", JSON.stringify(digest));
     applyGmailDigest(digest);
@@ -2314,6 +2418,118 @@ async function refreshGmailAccessToken(refreshToken) {
   };
   localStorage.setItem("oneMailGmailToken", JSON.stringify(nextToken));
   return nextToken;
+}
+
+function hasGmailModifyScope() {
+  const token = getStoredGmailToken();
+  return String(token?.scope || "")
+    .split(/\s+/)
+    .includes("https://www.googleapis.com/auth/gmail.modify");
+}
+
+async function trashGmailMessage(messageId) {
+  if (!hasGmailModifyScope()) {
+    throw new Error("Reconnect Gmail from Settings to allow 1Mail to move login notices to Trash.");
+  }
+
+  const accessToken = await getValidGmailAccessToken();
+  const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/trash`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.error?.message || "Could not move this email to Trash.");
+  }
+  return body;
+}
+
+function removeMessageFromStoredDigest(messageId) {
+  const digest = getStoredGmailDigest();
+  if (!digest?.messages) return;
+  const messages = digest.messages.filter((message) => message.id !== messageId);
+  const nextDigest = buildGmailDigest(messages);
+  localStorage.setItem("oneMailGmailDigest", JSON.stringify(nextDigest));
+  applyGmailDigest(nextDigest);
+}
+
+async function enrichMessagesWithCloudAi(messages, { silent = false } = {}) {
+  const config = getAiParserConfig();
+  if (!isAiParserConfigured(config)) return messages;
+
+  const maxMessages = Math.max(1, Math.min(Number(config.maxMessages || 30), 60));
+  const candidates = [...messages]
+    .sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime())
+    .slice(0, maxMessages);
+
+  if (!candidates.length) return messages;
+  if (!silent) setGmailConnectStatus(`Cloud AI is reading ${candidates.length} redacted email texts...`);
+
+  const response = await fetch(config.endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      emails: candidates.map(createAiParserEmailPayload),
+    }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.error || "Cloud AI parser request failed.");
+  }
+
+  const byId = new Map((body.classifications || []).map((classification) => [classification.id, classification]));
+  return messages.map((message) => {
+    const classification = byId.get(message.id);
+    if (!classification) return message;
+    return {
+      ...message,
+      aiClassification: normalizeAiClassification(classification, body),
+    };
+  });
+}
+
+function createAiParserEmailPayload(message) {
+  return {
+    attachmentNames: (message.attachmentNames || []).map((name) => redactAiParserText(name)).slice(0, 12),
+    hasCalendarInvite: hasCalendarInvite(message),
+    hasListUnsubscribe: Boolean(message.listUnsubscribe),
+    id: message.id,
+    isUnread: Boolean(message.isUnread),
+    date: message.date || "",
+    labels: message.labelIds || [],
+    senderDomain: message.senderDomain || "",
+    senderEmailDomain: message.senderDomain || "",
+    senderName: redactAiParserText(message.senderName || ""),
+    subject: redactAiParserText(message.subject || ""),
+    text: redactAiParserText(getMessageFullText(message)).slice(0, 9000),
+  };
+}
+
+function redactAiParserText(value = "") {
+  return String(value)
+    .replace(/\b\d{6}\b/g, "[code]")
+    .replace(/\b(?:\d[ -]*?){13,19}\b/g, "[card]")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email]")
+    .replace(/\b\+?1?[-.\s(]*\d{3}[-.\s)]*\d{3}[-.\s]*\d{4}\b/g, "[phone]")
+    .replace(/\b(order|invoice|transaction|tracking)\s*(#|id|number)?\s*[:#-]?\s*[A-Z0-9-]{6,}\b/gi, "$1 [id]");
+}
+
+function normalizeAiClassification(classification, responseBody = {}) {
+  return {
+    amount: classification.amount === null || classification.amount === undefined ? null : Number(classification.amount) || null,
+    confidence: Math.max(0, Math.min(1, Number(classification.confidence) || 0)),
+    currency: classification.currency || null,
+    evidence: Array.isArray(classification.evidence) ? classification.evidence.slice(0, 5) : [],
+    isCompletedTransaction: Boolean(classification.isCompletedTransaction),
+    isPromo: Boolean(classification.isPromo),
+    merchant: classification.merchant || null,
+    model: responseBody.model || "",
+    negativeEvidence: Array.isArray(classification.negativeEvidence) ? classification.negativeEvidence.slice(0, 5) : [],
+    primaryCategory: classification.primaryCategory || "unknown",
+    provider: responseBody.provider || "",
+    recommendedAction: classification.recommendedAction || "keep_in_inbox",
+    summary: classification.summary || "",
+  };
 }
 
 async function fetchLatestWeekGmailMessages(accessToken) {
@@ -2591,7 +2807,8 @@ function buildGmailDigest(messages = []) {
   const meetings = unread.filter(isMeetingMessage);
   const subscriptions = buildSubscriptionViews(messages);
   const bills = buildBillViews(messages);
-  const inboxItems = buildInboxItems(unread);
+  const loginItems = buildLoginItems(messages);
+  const inboxItems = buildInboxItems(unread.filter((message) => !isLoginConfirmationMessage(message)));
   const calendar = buildCalendarViews(events, messages);
   const security = buildSecurityItems(messages);
 
@@ -2607,6 +2824,10 @@ function buildGmailDigest(messages = []) {
       inbox: {
         count: inboxItems.length,
         items: inboxItems,
+      },
+      logins: {
+        count: loginItems.length,
+        items: loginItems,
       },
       security,
       subscriptions,
@@ -2681,6 +2902,11 @@ function applyGmailDigest(digest) {
   pages.inbox.metric = String(inbox.count || 0);
   pages.inbox.subtitle = "Unread mail from the latest week";
   pages.inbox.items = inbox.items || [];
+
+  const logins = sections.logins || {};
+  pages.logins.metric = String(logins.count || 0);
+  pages.logins.subtitle = "Latest week from Gmail";
+  pages.logins.items = logins.items || [];
 
   const calendar = sections.calendar || {};
   pages.calendar.metric = calendar.nextTime || "0";
@@ -2792,6 +3018,17 @@ function buildInboxItems(messages) {
   ]);
 }
 
+function buildLoginItems(messages) {
+  return messages.filter(isLoginConfirmationMessage).slice(0, 10).map((message) => [
+    getLoginIcon(message),
+    getLoginTitle(message),
+    getLoginSubtitle(message),
+    "Delete",
+    "#343a40",
+    createMailItemMeta(message, { cleanupAction: "trash" }),
+  ]);
+}
+
 function buildCalendarViews(events, messages) {
   const appointments = events
     .filter((message) => !isTravelMessage(message))
@@ -2810,7 +3047,7 @@ function buildCalendarViews(events, messages) {
 }
 
 function buildSecurityItems(messages) {
-  const suspicious = messages.filter(isSuspiciousMessage).slice(0, 6);
+  const suspicious = messages.filter((message) => isSuspiciousMessage(message) && !isLoginConfirmationMessage(message)).slice(0, 6);
   return {
     items: suspicious.map((message) => [
       "alert",
@@ -2838,6 +3075,18 @@ function includesAny(value, keywords) {
 
 function getMatchedKeywords(value, keywords) {
   return keywords.filter((keyword) => value.includes(keyword));
+}
+
+function getUsableAiClassification(message) {
+  const classification = message.aiClassification;
+  const minConfidence = Number(getAiParserConfig().minConfidence || 0.72);
+  if (!classification || Number(classification.confidence || 0) < minConfidence) return null;
+  return classification;
+}
+
+function isAiCategory(message, categories) {
+  const classification = getUsableAiClassification(message);
+  return Boolean(classification && categories.includes(classification.primaryCategory));
 }
 
 function getMarketingEvidence(message) {
@@ -2885,6 +3134,8 @@ function isLikelyPromotionalMessage(message) {
 }
 
 function isEventMessage(message) {
+  const ai = getUsableAiClassification(message);
+  if (ai) return ["event_appointment", "event_travel"].includes(ai.primaryCategory);
   if (isLikelyPromotionalMessage(message) && !hasStrongEventEvidence(message)) return false;
   return hasAppointmentEvidence(message) || hasTravelEvidence(message) || hasTicketEvidence(message);
 }
@@ -2948,6 +3199,8 @@ function hasTicketEvidence(message) {
 }
 
 function isMeetingMessage(message) {
+  const ai = getUsableAiClassification(message);
+  if (ai) return ai.primaryCategory === "meeting" && hasCalendarInvite(message);
   const text = messageText(message);
   if (!hasCalendarInvite(message)) return false;
 
@@ -3001,6 +3254,8 @@ function hasCalendarInvite(message) {
 }
 
 function isTravelMessage(message) {
+  const ai = getUsableAiClassification(message);
+  if (ai) return ai.primaryCategory === "event_travel";
   return hasTravelEvidence(message);
 }
 
@@ -3009,6 +3264,9 @@ function getEventTitle(message) {
 }
 
 function getEventCategory(message) {
+  const ai = getUsableAiClassification(message);
+  if (ai?.primaryCategory === "event_appointment") return "Appointment";
+  if (ai?.primaryCategory === "event_travel") return "Travel";
   const text = messageText(message);
   if (text.includes("appointment")) return "Appointment";
   if (text.includes("flight") || text.includes("boarding") || text.includes("airline")) return "Flight";
@@ -3037,6 +3295,15 @@ function normalizeWhitespace(value = "") {
 }
 
 function isSubscriptionMessage(message) {
+  const ai = getUsableAiClassification(message);
+  if (ai) {
+    return [
+      "subscription_promo",
+      "subscription_newsletter",
+      "subscription_social",
+      "subscription_productivity",
+    ].includes(ai.primaryCategory);
+  }
   const text = messageText(message);
   return Boolean(
     message.listUnsubscribe ||
@@ -3047,6 +3314,11 @@ function isSubscriptionMessage(message) {
 }
 
 function getSubscriptionCategory(message) {
+  const ai = getUsableAiClassification(message);
+  if (ai?.primaryCategory === "subscription_newsletter") return "newsletter";
+  if (ai?.primaryCategory === "subscription_social") return "social";
+  if (ai?.primaryCategory === "subscription_productivity") return "productivity";
+  if (ai?.primaryCategory === "subscription_promo") return "promos";
   const text = messageText(message);
   if (
     message.labelIds.includes("CATEGORY_SOCIAL") ||
@@ -3096,18 +3368,26 @@ function getUnsubscribeUrl(message) {
 }
 
 function isETransferMessage(message) {
+  const ai = getUsableAiClassification(message);
+  if (ai) return ai.primaryCategory === "e_transfer";
   return getEmailFinanceUnderstanding(message).kind === "e-transfer";
 }
 
 function isOneTimePurchaseMessage(message) {
-  return getEmailFinanceUnderstanding(message).kind === "one-time";
+  const ai = getUsableAiClassification(message);
+  if (ai) return ai.primaryCategory === "bill_one_time";
+  return ["one-time", "recurring"].includes(getEmailFinanceUnderstanding(message).kind);
 }
 
 function isRecurringBillMessage(message) {
-  return getEmailFinanceUnderstanding(message).kind === "recurring";
+  const ai = getUsableAiClassification(message);
+  if (ai) return ai.primaryCategory === "bill_recurring";
+  return false;
 }
 
 function getMessageAmount(message) {
+  const ai = getUsableAiClassification(message);
+  if (ai && Number.isFinite(Number(ai.amount)) && Number(ai.amount) > 0) return Number(ai.amount);
   return getEmailFinanceUnderstanding(message).amount;
 }
 
@@ -3160,8 +3440,11 @@ function getEmailFinanceUnderstanding(message) {
     invoiceEvidence.push("invoice");
   }
   const receiptEvidence = getMatchedKeywords(contentText, [
+    "receipt",
     "your receipt",
     "receipt for",
+    "purchase receipt",
+    "order receipt",
     "payment receipt",
     "transaction receipt",
     "statement",
@@ -3170,15 +3453,35 @@ function getEmailFinanceUnderstanding(message) {
     "payment confirmation",
     "total paid",
     "charged to",
+    "steam purchase",
+    "uniqlo order",
   ]);
+  if (subjectText.includes("receipt") && !receiptEvidence.includes("receipt")) {
+    receiptEvidence.push("receipt");
+  }
   const purchaseEvidence = getMatchedKeywords(contentText, [
     "order confirmation",
     "order number",
     "order #",
+    "order details",
+    "order summary",
+    "order total",
+    "your order",
     "thanks for your order",
     "thank you for your order",
     "thank you for your purchase",
+    "thank you for shopping",
+    "your purchase",
+    "recent purchase",
     "purchase confirmation",
+    "purchase history",
+    "steam support",
+    "steam purchase",
+    "steampowered",
+    "uniqlo order",
+    "uniqlo.com order",
+    "items purchased",
+    "transaction id",
     "transaction",
     "charged",
     "charge posted",
@@ -3193,17 +3496,39 @@ function getEmailFinanceUnderstanding(message) {
     "show starts",
     "doors open",
   ]);
+  const preliminaryTransactionIntent = Boolean(
+    transferEvidence.length ||
+      invoiceEvidence.length ||
+      receiptEvidence.length ||
+      purchaseEvidence.length ||
+      eventPurchaseEvidence.length ||
+      recurringEvidence.length,
+  );
+  const amount = extractChargeAmount(contentText, {
+    hasTransactionIntent: preliminaryTransactionIntent,
+  });
   const marketingEvidence = getMarketingEvidence(message);
+  const semanticPurchase = getSemanticPurchaseUnderstanding(message, {
+    amount,
+    eventPurchaseEvidence,
+    invoiceEvidence,
+    isGmailPromotion,
+    marketingEvidence,
+    purchaseEvidence,
+    receiptEvidence,
+  });
   const paymentEvidence = [...invoiceEvidence, ...receiptEvidence];
-  const transactionEvidence = [...paymentEvidence, ...purchaseEvidence, ...eventPurchaseEvidence];
+  const transactionEvidence = [
+    ...paymentEvidence,
+    ...purchaseEvidence,
+    ...eventPurchaseEvidence,
+    ...semanticPurchase.evidence,
+  ];
   const hasTransferIntent = transferEvidence.length > 0;
-  const hasHardPaymentIntent = paymentEvidence.length > 0 || purchaseEvidence.length > 0;
+  const hasHardPaymentIntent = paymentEvidence.length > 0 || purchaseEvidence.length > 0 || semanticPurchase.isCompletedPurchase;
   const hasTicketReceiptIntent = eventPurchaseEvidence.length > 0 && hasHardPaymentIntent;
   const hasTransactionIntent = hasHardPaymentIntent || hasTicketReceiptIntent;
   const hasRecurringIntent = recurringEvidence.length > 0;
-  const amount = extractChargeAmount(contentText, {
-    hasTransactionIntent: hasTransferIntent || hasTransactionIntent || hasRecurringIntent,
-  });
   const promotional = isLikelyPromotionalFinanceNoise({
     amount,
     isGmailPromotion,
@@ -3212,7 +3537,7 @@ function getEmailFinanceUnderstanding(message) {
     purchaseEvidence,
     recurringEvidence,
     transferEvidence,
-  });
+  }) && !semanticPurchase.isCompletedPurchase;
 
   if (hasTransferIntent) {
     return {
@@ -3250,10 +3575,13 @@ function getEmailFinanceUnderstanding(message) {
     };
   }
 
-  if (hasTransactionIntent && (amount > 0 || paymentEvidence.length > 0 || purchaseEvidence.length > 0)) {
+  if (
+    hasTransactionIntent &&
+    (amount > 0 || paymentEvidence.length > 0 || purchaseEvidence.length > 0 || semanticPurchase.isCompletedPurchase)
+  ) {
     return {
       amount,
-      confidence: paymentEvidence.length > 0 || amount > 0 ? 0.86 : 0.7,
+      confidence: paymentEvidence.length > 0 || amount > 0 || semanticPurchase.isCompletedPurchase ? 0.86 : 0.7,
       evidence: transactionEvidence,
       kind: "one-time",
       promotional: false,
@@ -3266,6 +3594,68 @@ function getEmailFinanceUnderstanding(message) {
     evidence: [...transactionEvidence, ...recurringEvidence, ...marketingEvidence],
     kind: "none",
     promotional: marketingEvidence.length > 0 || isGmailPromotion,
+  };
+}
+
+function getSemanticPurchaseUnderstanding(
+  message,
+  { amount, eventPurchaseEvidence, invoiceEvidence, isGmailPromotion, marketingEvidence, purchaseEvidence, receiptEvidence },
+) {
+  const contentText = messageContentText(message);
+  const fullText = messageText(message);
+  const receiptTrigger = receiptEvidence.length > 0 || includesAny(contentText, ["receipt", "purchase record"]);
+  const merchantEvidence = getMatchedKeywords(fullText, [
+    "steam support",
+    "steampowered",
+    "steam purchase",
+    "valve",
+    "uniqlo",
+    "uniqlo.com",
+    "uniqlo order",
+  ]);
+  const completionEvidence = getMatchedKeywords(contentText, [
+    "paid",
+    "charged",
+    "total",
+    "grand total",
+    "order total",
+    "subtotal",
+    "tax",
+    "payment",
+    "transaction id",
+    "order number",
+    "order #",
+    "order details",
+    "order summary",
+    "thank you for your purchase",
+    "thank you for your order",
+    "thank you for shopping",
+    "your purchase",
+    "recent purchase",
+    "items purchased",
+  ]);
+  const weakPromoOnly =
+    marketingEvidence.length > 0 &&
+    !receiptTrigger &&
+    !purchaseEvidence.length &&
+    !invoiceEvidence.length &&
+    !completionEvidence.length &&
+    amount === 0;
+
+  const score =
+    receiptEvidence.length * 3 +
+    invoiceEvidence.length * 3 +
+    purchaseEvidence.length * 2 +
+    completionEvidence.length * 2 +
+    merchantEvidence.length * 2 +
+    eventPurchaseEvidence.length +
+    (amount > 0 ? 2 : 0) -
+    (weakPromoOnly || (isGmailPromotion && amount === 0 && !receiptTrigger) ? marketingEvidence.length : 0);
+
+  return {
+    confidence: Math.max(0.4, Math.min(0.96, 0.55 + score * 0.04)),
+    evidence: [...merchantEvidence, ...completionEvidence].slice(0, 8),
+    isCompletedPurchase: !weakPromoOnly && score >= 4,
   };
 }
 
@@ -3302,18 +3692,33 @@ function extractChargeAmount(text, { hasTransactionIntent = false } = {}) {
       const context = `${before} ${match[0]} ${after}`;
       return {
         amount: Number(match[1].replace(/,/g, "")) || 0,
+        priority: getMoneyContextPriority(before, after),
         score: getMoneyContextScore(context),
       };
     })
     .filter((candidate) => candidate.amount > 0);
 
-  const positive = candidates.find((candidate) => candidate.score > 0);
+  const positive = candidates
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.priority - left.priority || right.score - left.score || right.amount - left.amount)[0];
   if (positive) return positive.amount;
 
   const neutral = candidates.find((candidate) => candidate.score === 0);
   if (neutral && hasTransactionIntent) return neutral.amount;
 
   return 0;
+}
+
+function getMoneyContextPriority(before = "", after = "") {
+  const lead = before.slice(-42);
+  const context = `${lead} ${after.slice(0, 18)}`;
+  if (includesAny(lead, ["grand total", "order total", "total paid", "amount due", "balance due"])) return 6;
+  if (includesAny(lead, ["charged", "paid", "payment", "receipt total"])) return 5;
+  if (includesAny(lead, ["total"])) return 4;
+  if (includesAny(lead, ["subtotal"])) return 1;
+  if (includesAny(lead, ["tax", "shipping", "discount", "savings"])) return 0;
+  if (includesAny(context, ["invoice", "receipt", "purchase", "order"])) return 3;
+  return 2;
 }
 
 function getMoneyContextScore(context) {
@@ -3419,7 +3824,71 @@ function getBillSubtitle(message) {
   return `From ${message.senderName}`;
 }
 
+function isLoginConfirmationMessage(message) {
+  const ai = getUsableAiClassification(message);
+  if (ai) return ai.primaryCategory === "login_confirmation";
+  const text = messageText(message);
+  const loginEvidence = getMatchedKeywords(text, [
+    "new sign-in",
+    "new sign in",
+    "new login",
+    "new device",
+    "device signed in",
+    "signed in on",
+    "signed in from",
+    "login confirmation",
+    "sign-in confirmation",
+    "sign in confirmation",
+    "security alert",
+    "recent sign-in",
+    "recent login",
+    "login attempt",
+    "sign-in attempt",
+    "unrecognized device",
+    "unknown device",
+    "verify it was you",
+    "verification code",
+    "one-time code",
+  ]);
+  if (!loginEvidence.length) return false;
+
+  const accountEvidence = includesAny(text, [
+    "google account",
+    "apple id",
+    "microsoft account",
+    "github",
+    "steam guard",
+    "your account",
+    "account security",
+    "device",
+    "browser",
+  ]);
+  return accountEvidence && !isMeetingMessage(message) && !isOneTimePurchaseMessage(message);
+}
+
+function getLoginIcon(message) {
+  const text = messageText(message);
+  if (text.includes("security alert") || text.includes("unrecognized") || text.includes("unknown device")) return "shield";
+  return "lock";
+}
+
+function getLoginTitle(message) {
+  const text = messageText(message);
+  if (text.includes("google account")) return "Google account sign-in";
+  if (text.includes("apple id")) return "Apple ID sign-in";
+  if (text.includes("microsoft account")) return "Microsoft account sign-in";
+  if (text.includes("github")) return "GitHub sign-in";
+  if (text.includes("steam guard")) return "Steam Guard sign-in";
+  return message.subject || "Login confirmation";
+}
+
+function getLoginSubtitle(message) {
+  const when = formatRelativeMailDate(message.date);
+  return `${message.senderEmail || message.senderName} · ${when}`;
+}
+
 function getInboxIcon(message) {
+  if (isLoginConfirmationMessage(message)) return "lock";
   if (isMeetingMessage(message) || isEventMessage(message)) return "calendar";
   if (isRecurringBillMessage(message) || isOneTimePurchaseMessage(message) || isETransferMessage(message)) return "receipt";
   if (isSuspiciousMessage(message)) return "alert";
@@ -3427,6 +3896,7 @@ function getInboxIcon(message) {
 }
 
 function getMessageTone(message) {
+  if (isLoginConfirmationMessage(message)) return "Login";
   if (isSuspiciousMessage(message)) return "Review";
   if (isMeetingMessage(message)) return "Meeting";
   if (isEventMessage(message)) return getEventCategory(message);
@@ -3437,6 +3907,7 @@ function getMessageTone(message) {
 }
 
 function getToneColor(message) {
+  if (isLoginConfirmationMessage(message)) return "#343a40";
   if (isSuspiciousMessage(message)) return "#d64242";
   if (isMeetingMessage(message) || isEventMessage(message)) return "#2458ff";
   if (isRecurringBillMessage(message) || isOneTimePurchaseMessage(message) || isETransferMessage(message)) return "#0d8a61";
@@ -3445,6 +3916,8 @@ function getToneColor(message) {
 }
 
 function isSuspiciousMessage(message) {
+  const ai = getUsableAiClassification(message);
+  if (ai) return ai.primaryCategory === "security_risk";
   const text = messageText(message);
   return includesAny(text, [
     "urgent payment",

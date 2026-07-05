@@ -4,9 +4,11 @@
 
 ## Current Prototype
 
-- Gmail access is read-only and runs in the client prototype.
+- Gmail access uses read/modify scope for prototype cleanup actions such as moving login notices to Trash.
 - The app processes the latest week of email by default.
-- The current classifier runs locally in JavaScript. It does not call an outside AI provider.
+- The classifier can call a local backend that proxies redacted text to OpenRouter, then falls back to local JavaScript rules if the backend is unavailable.
+- The backend reads the OpenRouter API key from `.env`; API keys must never be shipped in the app bundle.
+- The backend keeps recurring-bill history in an ignored local JSON database. It stores hashed bill fingerprints, months, amounts, and message hashes, not raw email bodies.
 - Prototype Gmail tokens and processed digests are stored in local browser/app storage for testing only.
 
 ## Data Handling Rules
@@ -54,6 +56,7 @@
 
 - Treat marketing words such as sale, save, discount, deal, shop now, and up to as negative bill signals.
 - Classify as a bill only when stronger evidence exists, such as invoice, receipt, amount due, paid invoice, order confirmation, renewal, billing cycle, or e-transfer wording.
+- Classify as recurring only when backend history shows the same hashed bill fingerprint and same amount in the previous month. Without history, classify bill-like emails as one-time.
 - Classify as a meeting only when the email includes a real calendar invite signal, such as a `text/calendar` MIME part or `.ics` file from Google Calendar, Apple Calendar, or another calendar system.
 - Keep the classifier reason local with the digest so the user can review why a message appeared in a tab.
 - When a listing is shown, preserve a source message ID so the user can inspect the original sender, body text, and attachment names.

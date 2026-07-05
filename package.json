@@ -5,6 +5,8 @@
   "description": "iPhone-first 1Mail prototype with native test wrapper.",
   "scripts": {
     "build": "node tools/build-capacitor.js",
+    "server": "node server/index.js",
+    "ai:server": "node server/index.js",
     "ios:add": "npm run build && npx cap add ios && npm run ios:configure-oauth",
     "ios:configure-oauth": "node tools/configure-ios-oauth.js",
     "ios:sync": "npm run build && npx cap sync ios && npm run ios:configure-oauth",
