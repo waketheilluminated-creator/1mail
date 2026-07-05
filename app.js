@@ -295,6 +295,17 @@ const pages = {
       ["lock", "New Google sign-in", "Remote device confirmation", "Delete", "#343a40"],
       ["shield", "Apple ID verification", "Sign-in confirmation", "Delete", "#343a40"],
     ],
+    tabViews: [
+      {
+        items: [["lock", "New Google sign-in", "Remote device confirmation", "Delete", "#343a40"]],
+      },
+      {
+        items: [["shield", "GitHub sign-in", "Recent account access", "Delete", "#343a40"]],
+      },
+      {
+        items: [["shield", "Apple ID verification", "Verification code", "Delete", "#343a40"]],
+      },
+    ],
   },
   subscriptions: {
     eyebrow: "Subscriptions",
@@ -1696,8 +1707,9 @@ function renderSubscriptionItems(items = []) {
     <section class="single-stack subscription-stack">
       ${items
         .map((item) => {
-          const [icon, title, subtitle, side, color, mode, url] = item;
+          const [icon, title, subtitle, _side, color, mode, url] = item;
           const isUnsubscribed = isSubscriptionUnsubscribed(title);
+          const messageId = getItemMessageId(item);
           const detailAttr = getMailDetailAttributes(item, title);
           return `
             <article class="item subscription-item${isUnsubscribed ? " is-unsubscribed" : ""}${detailAttr ? " mail-detail-card" : ""}" style="--item-color: ${color}" ${detailAttr}>
@@ -1711,7 +1723,14 @@ function renderSubscriptionItems(items = []) {
                 data-unsub-url="${escapeAttribute(url)}"
               >${icons[icon]}</button>
               <span class="item-main"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(subtitle)}</span></span>
-              <span class="item-side">${escapeHtml(side)}</span>
+              <button
+                class="subscription-delete-button"
+                type="button"
+                data-subscription-delete="${escapeAttribute(messageId)}"
+                aria-label="Move ${escapeAttribute(title)} email to Trash"
+                ${messageId ? "" : "disabled"}
+              >${icons.trash}</button>
+              <p class="subscription-delete-status" role="status" aria-live="polite"></p>
               <div class="subscription-unsub-result" aria-live="polite"></div>
             </article>
           `;
@@ -1728,6 +1747,37 @@ function setupSubscriptionButtons() {
       showSubscriptionUnsubscribeFlow(button);
     });
   });
+  document.querySelectorAll("[data-subscription-delete]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      cleanupSubscriptionMessage(button);
+    });
+  });
+}
+
+async function cleanupSubscriptionMessage(button) {
+  const messageId = button.dataset.subscriptionDelete;
+  const item = button.closest(".subscription-item");
+  const status = item?.querySelector(".subscription-delete-status");
+  if (!messageId || !status) return;
+
+  button.disabled = true;
+  item.classList.add("is-deleting");
+  status.textContent = "Moving to Trash...";
+
+  try {
+    await trashGmailMessage(messageId);
+    status.textContent = "Moved to Trash.";
+    item.classList.add("is-deleted");
+    window.setTimeout(() => {
+      removeMessageFromStoredDigest(messageId);
+      renderPage("subscriptions");
+    }, 420);
+  } catch (error) {
+    button.disabled = false;
+    item.classList.remove("is-deleting");
+    status.textContent = error.message;
+  }
 }
 
 function showSubscriptionUnsubscribeFlow(button) {
@@ -2151,6 +2201,7 @@ function setupMailDetailCards() {
       showMailDetail(card.dataset.mailDetail);
     });
     card.addEventListener("keydown", (event) => {
+      if (event.target.closest("button, a, .bill-cancel-result, .subscription-unsub-result")) return;
       if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
       showMailDetail(card.dataset.mailDetail);
@@ -2429,7 +2480,7 @@ function hasGmailModifyScope() {
 
 async function trashGmailMessage(messageId) {
   if (!hasGmailModifyScope()) {
-    throw new Error("Reconnect Gmail from Settings to allow 1Mail to move login notices to Trash.");
+    throw new Error("Reconnect Gmail from Settings to allow 1Mail to move emails to Trash.");
   }
 
   const accessToken = await getValidGmailAccessToken();
@@ -2807,7 +2858,7 @@ function buildGmailDigest(messages = []) {
   const meetings = unread.filter(isMeetingMessage);
   const subscriptions = buildSubscriptionViews(messages);
   const bills = buildBillViews(messages);
-  const loginItems = buildLoginItems(messages);
+  const logins = buildLoginViews(messages);
   const inboxItems = buildInboxItems(unread.filter((message) => !isLoginConfirmationMessage(message)));
   const calendar = buildCalendarViews(events, messages);
   const security = buildSecurityItems(messages);
@@ -2826,8 +2877,7 @@ function buildGmailDigest(messages = []) {
         items: inboxItems,
       },
       logins: {
-        count: loginItems.length,
-        items: loginItems,
+        ...logins,
       },
       security,
       subscriptions,
@@ -2906,7 +2956,12 @@ function applyGmailDigest(digest) {
   const logins = sections.logins || {};
   pages.logins.metric = String(logins.count || 0);
   pages.logins.subtitle = "Latest week from Gmail";
-  pages.logins.items = logins.items || [];
+  pages.logins.tabViews = [
+    { items: logins.newDevice || [] },
+    { items: logins.signIn || [] },
+    { items: logins.verification || [] },
+  ];
+  pages.logins.items = pages.logins.tabViews[0].items;
 
   const calendar = sections.calendar || {};
   pages.calendar.metric = calendar.nextTime || "0";
@@ -3018,15 +3073,29 @@ function buildInboxItems(messages) {
   ]);
 }
 
-function buildLoginItems(messages) {
-  return messages.filter(isLoginConfirmationMessage).slice(0, 10).map((message) => [
-    getLoginIcon(message),
-    getLoginTitle(message),
-    getLoginSubtitle(message),
-    "Delete",
-    "#343a40",
-    createMailItemMeta(message, { cleanupAction: "trash" }),
-  ]);
+function buildLoginViews(messages) {
+  const groups = {
+    newDevice: [],
+    signIn: [],
+    verification: [],
+  };
+
+  messages.filter(isLoginConfirmationMessage).forEach((message) => {
+    const type = getLoginNoticeType(message);
+    groups[type].push([
+      getLoginIcon(message),
+      getLoginTitle(message),
+      getLoginSubtitle(message),
+      "Delete",
+      "#343a40",
+      createMailItemMeta(message, { cleanupAction: "trash", loginNoticeType: type }),
+    ]);
+  });
+
+  return {
+    ...groups,
+    count: Object.values(groups).reduce((sum, items) => sum + items.length, 0),
+  };
 }
 
 function buildCalendarViews(events, messages) {
@@ -3296,6 +3365,7 @@ function normalizeWhitespace(value = "") {
 
 function isSubscriptionMessage(message) {
   const ai = getUsableAiClassification(message);
+  if (shouldPreferSubscriptionOverBill(message, ai)) return true;
   if (ai) {
     return [
       "subscription_promo",
@@ -3304,12 +3374,11 @@ function isSubscriptionMessage(message) {
       "subscription_productivity",
     ].includes(ai.primaryCategory);
   }
-  const text = messageText(message);
   return Boolean(
     message.listUnsubscribe ||
       message.labelIds.includes("CATEGORY_PROMOTIONS") ||
       message.labelIds.includes("CATEGORY_SOCIAL") ||
-      includesAny(text, ["unsubscribe", "newsletter", "digest", "sale", "deal", "promo", "notification preferences"]),
+      hasSubscriptionDeliverySignal(message),
   );
 }
 
@@ -3375,14 +3444,92 @@ function isETransferMessage(message) {
 
 function isOneTimePurchaseMessage(message) {
   const ai = getUsableAiClassification(message);
-  if (ai) return ai.primaryCategory === "bill_one_time";
+  if (ai) return ai.primaryCategory === "bill_one_time" && !shouldPreferSubscriptionOverBill(message, ai);
+  if (isSubscriptionLikeMarketingNotice(message)) return false;
   return ["one-time", "recurring"].includes(getEmailFinanceUnderstanding(message).kind);
 }
 
 function isRecurringBillMessage(message) {
   const ai = getUsableAiClassification(message);
-  if (ai) return ai.primaryCategory === "bill_recurring";
+  if (ai) return ai.primaryCategory === "bill_recurring" && !shouldPreferSubscriptionOverBill(message, ai);
   return false;
+}
+
+function shouldPreferSubscriptionOverBill(message, ai = getUsableAiClassification(message)) {
+  if (!["bill_one_time", "bill_recurring"].includes(ai?.primaryCategory)) return false;
+  return isSubscriptionLikeMarketingNotice(message);
+}
+
+function isSubscriptionLikeMarketingNotice(message) {
+  return hasSubscriptionDeliverySignal(message) && !hasCompletedBillingEvidence(message);
+}
+
+function hasSubscriptionDeliverySignal(message) {
+  const text = messageText(message);
+  const labelIds = message.labelIds || [];
+  return Boolean(
+    message.listUnsubscribe ||
+      labelIds.includes("CATEGORY_PROMOTIONS") ||
+      labelIds.includes("CATEGORY_SOCIAL") ||
+      includesAny(text, [
+        "unsubscribe",
+        "newsletter",
+        "digest",
+        "sale",
+        "deal",
+        "promo",
+        "promotion",
+        "notification preferences",
+        "email preferences",
+        "manage preferences",
+        "membership offer",
+        "subscription plan",
+      ]),
+  );
+}
+
+function hasCompletedBillingEvidence(message) {
+  const text = messageText(message);
+  const contentText = messageContentText(message);
+  const subjectText = String(message.subject || "").toLowerCase();
+  return Boolean(
+    includesAny(subjectText, ["receipt", "invoice", "order confirmation", "payment confirmation", "purchase confirmation"]) ||
+      includesAny(contentText, [
+        "invoice notification",
+        "invoice #",
+        "invoice number",
+        "new invoice",
+        "view invoice",
+        "download invoice",
+        "receipt",
+        "your receipt",
+        "purchase receipt",
+        "payment receipt",
+        "paid invoice",
+        "order confirmation",
+        "order number",
+        "order #",
+        "order total",
+        "thank you for your order",
+        "thank you for your purchase",
+        "thank you for shopping",
+        "your purchase",
+        "purchase history",
+        "transaction id",
+        "total paid",
+        "amount due",
+        "balance due",
+        "payment due",
+        "charged to",
+        "payment processed",
+        "renewal receipt",
+        "subscription renewed",
+        "membership renewed",
+        "steam purchase",
+        "uniqlo order",
+      ]) ||
+      /\b(?:paid|charged)\s+(?:ca\$|us\$|usd|cad|\$)?\s*[0-9]/i.test(text),
+  );
 }
 
 function getMessageAmount(message) {
@@ -3508,6 +3655,15 @@ function getEmailFinanceUnderstanding(message) {
     hasTransactionIntent: preliminaryTransactionIntent,
   });
   const marketingEvidence = getMarketingEvidence(message);
+  if (!hasTransferIntent && isSubscriptionLikeMarketingNotice(message)) {
+    return {
+      amount: 0,
+      confidence: 0.86,
+      evidence: marketingEvidence.length ? marketingEvidence : ["subscription or marketing controls"],
+      kind: "promo",
+      promotional: true,
+    };
+  }
   const semanticPurchase = getSemanticPurchaseUnderstanding(message, {
     amount,
     eventPurchaseEvidence,
@@ -3885,6 +4041,35 @@ function getLoginTitle(message) {
 function getLoginSubtitle(message) {
   const when = formatRelativeMailDate(message.date);
   return `${message.senderEmail || message.senderName} · ${when}`;
+}
+
+function getLoginNoticeType(message) {
+  const text = messageText(message);
+  const subject = String(message.subject || "").toLowerCase();
+  const newDeviceSignals = [
+    "new device",
+    "unknown device",
+    "unrecognized device",
+    "new browser",
+    "unrecognized browser",
+    "device signed in",
+    "signed in on",
+    "signed in from",
+    "new sign-in on",
+  ];
+  const verificationSignals = [
+    "verification code",
+    "one-time code",
+    "security code",
+    "confirm your email",
+    "verify your email",
+    "verify it was you",
+    "authentication code",
+  ];
+
+  if (includesAny(text, newDeviceSignals) || includesAny(subject, newDeviceSignals)) return "newDevice";
+  if (includesAny(text, verificationSignals) || includesAny(subject, verificationSignals)) return "verification";
+  return "signIn";
 }
 
 function getInboxIcon(message) {

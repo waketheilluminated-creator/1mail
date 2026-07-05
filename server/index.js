@@ -99,6 +99,7 @@ const classifierSystemPrompt = [
   "You are 1Mail's email classification engine.",
   "Classify the real user intent of each email from its text, not by keyword matching alone.",
   "Promo emails often mention dollars, sales, events, tickets, receipts, or discounts. Do not classify them as bills unless the email confirms a completed purchase, receipt, invoice, amount due, charge, renewal, or money transfer.",
+  "A subscription or list-unsubscribe email that only advertises or describes a plan price is not a bill. Put it in a subscription_* category unless the email contains receipt, invoice, charged, paid, order confirmation, amount due, or renewal receipt evidence.",
   "Do not decide recurring from text alone. Prefer bill_one_time for a bill-like email; the backend history layer upgrades it to bill_recurring only when the same bill fingerprint and amount appeared last month.",
   "A meeting requires a calendar invite signal from the payload. If hasCalendarInvite is false, do not classify as meeting.",
   "Login confirmations are account access notices such as new device sign-in, security alert, verification code, or login confirmation. These should be login_confirmation unless they look like phishing.",
@@ -327,8 +328,7 @@ function normalizeClassifications(classifications, emailById = new Map()) {
       primaryCategory,
       confidence: clamp(Number(item.confidence), 0, 1, 0.4),
       isPromo: primaryCategory.startsWith("subscription_") || Boolean(item.isPromo),
-      isCompletedTransaction:
-        ["bill_one_time", "bill_recurring", "e_transfer"].includes(primaryCategory) || Boolean(item.isCompletedTransaction),
+      isCompletedTransaction: ["bill_one_time", "bill_recurring", "e_transfer"].includes(primaryCategory),
       amount,
       currency: item.currency ? String(item.currency).slice(0, 12) : null,
       merchant: item.merchant ? String(item.merchant).slice(0, 120) : null,
@@ -487,6 +487,12 @@ function repairPrimaryCategory(primaryCategory, email = {}) {
   const text = `${email.subject || ""} ${email.text || ""}`.toLowerCase();
   if (!text.trim()) return primaryCategory;
 
+  const hasSubscriptionSignal = hasSubscriptionDeliverySignal(email, text);
+  const hasCompletedBillSignal = hasCompletedBillingSignal(text);
+  if (["bill_one_time", "bill_recurring"].includes(primaryCategory) && hasSubscriptionSignal && !hasCompletedBillSignal) {
+    return inferSubscriptionCategory(email, text);
+  }
+
   const hasRecurringSignal = hasAny(text, [
     "subscription",
     "renewal",
@@ -523,6 +529,92 @@ function repairPrimaryCategory(primaryCategory, email = {}) {
     return "ordinary";
   }
   return primaryCategory;
+}
+
+function hasSubscriptionDeliverySignal(email = {}, text = "") {
+  const labels = Array.isArray(email.labels) ? email.labels : [];
+  return Boolean(
+    email.hasListUnsubscribe ||
+      labels.includes("CATEGORY_PROMOTIONS") ||
+      labels.includes("CATEGORY_SOCIAL") ||
+      hasAny(text, [
+        "unsubscribe",
+        "newsletter",
+        "digest",
+        "sale",
+        "deal",
+        "promo",
+        "promotion",
+        "notification preferences",
+        "email preferences",
+        "manage preferences",
+        "membership offer",
+        "subscription plan",
+      ]),
+  );
+}
+
+function hasCompletedBillingSignal(text = "") {
+  return Boolean(
+    hasAny(text, [
+      "receipt",
+      "your receipt",
+      "invoice",
+      "invoice notification",
+      "order confirmation",
+      "order number",
+      "order #",
+      "order total",
+      "payment confirmation",
+      "purchase confirmation",
+      "thank you for your order",
+      "thank you for your purchase",
+      "thank you for shopping",
+      "transaction id",
+      "total paid",
+      "amount due",
+      "balance due",
+      "payment due",
+      "charged to",
+      "payment processed",
+      "renewal receipt",
+      "subscription renewed",
+      "membership renewed",
+      "steam purchase",
+      "uniqlo order",
+    ]) || /\b(?:paid|charged)\s+(?:ca\$|us\$|usd|cad|\$)?\s*[0-9]/i.test(text),
+  );
+}
+
+function inferSubscriptionCategory(email = {}, text = "") {
+  const labels = Array.isArray(email.labels) ? email.labels : [];
+  const domain = String(email.senderDomain || email.senderEmailDomain || "").toLowerCase();
+  if (
+    labels.includes("CATEGORY_SOCIAL") ||
+    hasAny(`${text} ${domain}`, ["linkedin", "instagram", "facebook", "discord", "reddit", "twitter", "x.com"])
+  ) {
+    return "subscription_social";
+  }
+  if (
+    hasAny(`${text} ${domain}`, [
+      "notion",
+      "figma",
+      "linear",
+      "slack",
+      "github",
+      "jira",
+      "asana",
+      "trello",
+      "workspace",
+      "product update",
+    ])
+  ) {
+    return "subscription_productivity";
+  }
+  if (hasAny(text, ["newsletter", "digest", "weekly", "roundup", "substack", "medium", "product hunt", "news"])) {
+    return "subscription_newsletter";
+  }
+  return "subscription_promo";
 }
 
 function hasAny(value, keywords) {
