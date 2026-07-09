@@ -1,4 +1,6 @@
 const app = document.querySelector("#app");
+const USER_AGREEMENT_STORAGE_KEY = "oneMailUserAgreementAccepted";
+const USER_AGREEMENT_VERSION = "2026-07-09-v1";
 
 const icons = {
   arrowLeft:
@@ -33,6 +35,10 @@ const icons = {
     '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-10 6L2 7"/></svg>',
   lock:
     '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+  footprint:
+    '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 3.8c1.2.2 2 1.6 1.7 3.1-.3 1.5-1.5 2.6-2.7 2.4-1.2-.2-2-1.6-1.7-3.1.3-1.5 1.5-2.6 2.7-2.4Z"/><path d="M7.3 12.6c1.4.2 2.3 1.7 2 3.3-.3 1.7-1.7 2.8-3 2.6-1.4-.2-2.3-1.7-2-3.3.3-1.7 1.7-2.8 3-2.6Z"/><path d="M16.4 5.4c1.1-.4 2.4.6 2.9 2.1.5 1.5.1 3-1 3.3-1.1.4-2.4-.6-2.9-2.1-.5-1.5-.1-3 1-3.3Z"/><path d="M17.2 14.3c1.3-.4 2.7.5 3.2 2.1.5 1.6-.1 3.2-1.4 3.6-1.3.4-2.7-.5-3.2-2.1-.5-1.6.1-3.2 1.4-3.6Z"/></svg>',
+  plane:
+    '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 16v-2L13 9V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5Z"/></svg>',
   alert:
     '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>',
   bell:
@@ -116,12 +122,16 @@ const modules = [
   },
 ];
 
+const homeModules = modules.filter((module) => module.id !== "today");
+
 const wheel = {
   size: 350,
   center: 175,
-  innerRadius: 72,
-  outerRadius: 171,
+  innerRadius: 60,
+  outerRadius: 170,
   iconRadius: 122,
+  cornerRadius: 12,
+  segmentGapDegrees: 2.6,
 };
 
 const pages = {
@@ -418,10 +428,13 @@ const GMAIL_BODY_TEXT_LIMIT = 50000;
 
 let route = "home";
 let dragState = null;
+let centerPressState = null;
 let suppressCenterClick = false;
 const activePageTabs = {};
 const SUBSCRIPTION_UNSUBSCRIBED_STORAGE_KEY = "oneMailUnsubscribedSenders";
 const unsubscribedSubscriptionKeys = loadUnsubscribedSubscriptionKeys();
+const CENTER_LONG_PRESS_MS = 320;
+const CENTER_DRAG_START_DISTANCE = 18;
 
 const aiSuggestions = [
   "Unsubscribe Product Hunt",
@@ -579,33 +592,163 @@ let inboxBookmarkDrag = null;
 let suppressInboxBookmarkClick = false;
 let gmailConnectStatus = "";
 let gmailSyncInFlight = false;
+const makeSectionIds = new Set(["calendar", "bills", "security", "subscriptions", "logins"]);
+const makeExpandedCards = {};
+const makeDeletedCards = new Set();
+let makeUnsubscribeModal = null;
+
+const makeSectionMeta = {
+  calendar: {
+    title: "APPOINTMENT",
+    subtitle: "Let time arrive with less friction.",
+    metricColor: "#22c88b",
+    tabs: ["Appointments", "Travel"],
+    empty: "No appointment emails matched this tab.",
+  },
+  bills: {
+    title: "BILLS",
+    subtitle: "Let's untangle your finances.",
+    metricColor: "#22c88b",
+    tabs: ["Recurring", "One-time", "E-transfer"],
+    empty: "No money emails matched this bill tab.",
+  },
+  security: {
+    title: "SECURITY",
+    subtitle: "Keep the door closed to what feels wrong.",
+    metricColor: "#fb454f",
+    tabs: ["Domain mismatch", "Urgent payment", "Risky link"],
+    empty: "No suspicious emails matched this view.",
+  },
+  subscriptions: {
+    title: "SUBSCRIPTION",
+    subtitle: "Let's cut down the noise.",
+    metricColor: "#22c88b",
+    tabs: ["Promos", "Newsletter", "Social", "Productivity"],
+    empty: "No subscription senders matched this category.",
+  },
+  logins: {
+    title: "TRACES",
+    subtitle: "Let's hide our footsteps",
+    metricColor: "#22c88b",
+    tabs: [],
+    empty: "No login confirmation traces matched the latest week.",
+  },
+};
+
+const makeItemDetails = {
+  bills: {
+    "Notion Plus": {
+      body:
+        "Your Notion Plus workspace renews on Jul 2. The current billing cycle includes team workspace access, AI add-ons, and monthly storage.",
+      attachments: ["notion-invoice-jul.pdf"],
+    },
+    "iCloud+": {
+      body: "Apple confirms your iCloud+ storage plan renews on Jul 5. This charge keeps additional iCloud storage active for the account.",
+      attachments: ["No attachments"],
+    },
+    "ChatGPT Plus": {
+      body: "Your ChatGPT Plus plan renews on Jul 11. The billing email includes the monthly subscription amount and account plan details.",
+      attachments: ["No attachments"],
+    },
+    "Summer concert tickets": {
+      body:
+        "Ticketmaster confirmed your summer concert ticket purchase. Mobile entry is required and doors open at 7:00 PM.",
+      attachments: ["ticketmaster-order.pdf", "mobile-entry.pkpass"],
+    },
+    "Comedy night booking": {
+      body: "Eventbrite confirmed your comedy night booking. Seat B12 is reserved and the show starts at 8:30 PM.",
+      attachments: ["eventbrite-receipt.pdf"],
+    },
+    "Indie theater show": {
+      body: "The box office receipt confirms a one-time ticket purchase. No recurring charge was detected in the email.",
+      attachments: ["No attachments"],
+    },
+  },
+  calendar: {
+    "Dentist appointment": {
+      body:
+        "Your appointment reminder from Downtown Dental confirms tomorrow at 3:00 PM. Arrive 10 minutes early for registration.",
+      attachments: ["appointment.ics"],
+    },
+    "Design review": {
+      body: "The design review invite is scheduled for Friday at 9:30 AM. The email includes calendar invite details.",
+      attachments: ["design-review.ics"],
+    },
+    "Eye exam": {
+      body: "The clinic reminder confirms your eye exam on Jul 9 at 2:00 PM.",
+      attachments: ["appointment.ics"],
+    },
+    "Flight to New York": {
+      body: "Delta confirms your flight to New York. Check-in opens before departure and the booking reference is in the email.",
+      attachments: ["boarding-pass.pdf"],
+    },
+    "Hotel check-in": {
+      body: "The hotel booking email confirms check-in time and reservation details for your stay.",
+      attachments: ["hotel-confirmation.pdf"],
+    },
+    "Rental car pickup": {
+      body: "Hertz confirms your rental car pickup time and reservation location.",
+      attachments: ["rental-confirmation.pdf"],
+    },
+  },
+  security: {
+    "PayPal account notice": {
+      body:
+        "This message claims account action is required, but the sender domain does not match PayPal. Avoid clicking links until verified.",
+      attachments: ["No attachments"],
+    },
+    "Amazon receipt": {
+      body: "The sender passed the basic authentication checks and does not show obvious spoofing signs.",
+      attachments: ["No attachments"],
+    },
+  },
+  logins: {
+    "New Google sign-in": {
+      body:
+        "Google reported a new sign-in from a remote device. If this was not you, review account security immediately.",
+      attachments: ["No attachments"],
+    },
+    "Apple ID verification": {
+      body: "Apple sent a two-factor confirmation notice. If you did not request it, review your Apple ID sign-in activity.",
+      attachments: ["No attachments"],
+    },
+    "GitHub recovery code": {
+      body: "GitHub sent a one-time access notice related to account recovery or sign-in verification.",
+      attachments: ["No attachments"],
+    },
+  },
+};
 
 function render() {
   if (route === "home") {
     renderHome();
+    showUserAgreementIfNeeded();
     return;
   }
   if (route === "ai") {
     renderAiPage();
+    showUserAgreementIfNeeded();
     return;
   }
   if (route === "settings") {
     renderSettingsPage();
+    showUserAgreementIfNeeded();
     return;
   }
   renderPage(route);
+  showUserAgreementIfNeeded();
 }
 
 function renderHome() {
-  app.classList.remove("is-page-view");
-  const sliceAngle = 360 / modules.length;
+  app.classList.remove("is-page-view", "is-make-section-view");
+  app.classList.add("is-home-view");
+  const sliceAngle = 360 / homeModules.length;
   const mailboxAvatar = getMailboxAvatar();
   app.innerHTML = `
     <div class="view home-view">
       <header class="topbar">
         <div class="brand-lockup">
-          <p class="eyebrow">Private email intelligence</p>
-          <h1 class="title">1Mail</h1>
+          <h1 class="title">1MAIL</h1>
           <button class="title-menu-button" type="button" data-open="settings" aria-label="Open app settings">
             <span class="title-menu-lines" aria-hidden="true"><span></span><span></span><span></span></span>
             <span class="sr-only">App settings</span>
@@ -619,15 +762,15 @@ function renderHome() {
           title="${escapeAttribute(mailboxAvatar.email)}"
           style="--mailbox-color: ${mailboxAvatar.color}"
         >
-          ${mailboxAvatar.initial}
+          ${icons.user}
         </button>
       </header>
 
       <div class="hub-stage" id="hubStage">
         <div class="wheel-ring" id="wheelRing">
-          ${renderWheelSurface(sliceAngle)}
+          ${renderWheelSurface(sliceAngle, homeModules)}
           <div class="unlock-line" id="unlockLine" aria-hidden="true"></div>
-          ${modules
+          ${homeModules
             .map(
               (module) => `
                 <button
@@ -645,8 +788,8 @@ function renderHome() {
             .join("")}
           <button class="center-control" id="centerControl" type="button" aria-label="1Mail AI">
             <span class="center-mark">
-              <strong id="centerLabel">1Mail AI</strong>
-              <span id="centerHint" class="center-hint">Ask anything about your mailbox</span>
+              <strong id="centerLabel">1Mail</strong>
+              <span id="centerHint" class="center-hint">Ask Anything</span>
             </span>
           </button>
         </div>
@@ -662,14 +805,14 @@ function renderHome() {
   const wheelRing = document.querySelector("#wheelRing");
   setupInboxBookmark();
 
-  center.addEventListener("pointerdown", (event) => startDrag(event, center, stage, line, "pointer"));
-  center.addEventListener("mousedown", (event) => startDrag(event, center, stage, line, "mouse"));
-  center.addEventListener("touchstart", (event) => startDrag(event, center, stage, line, "touch"), {
-    passive: false,
-  });
+  center.addEventListener("pointerdown", (event) => startCenterPress(event, center, stage, line));
   center.addEventListener("click", () => {
     if (suppressCenterClick) {
       suppressCenterClick = false;
+      return;
+    }
+    if (center.dataset.pointerHandled === "true") {
+      center.dataset.pointerHandled = "false";
       return;
     }
     openRoute("ai");
@@ -730,7 +873,7 @@ function renderInboxBookmark() {
     <footer class="home-footer">
       <section class="inbox-bookmark" id="inboxBookmark">
         <div class="bookmark-copy">
-          <strong class="fit-one-line">${bookmarkPrompt}</strong>
+          <strong>${bookmarkPrompt}</strong>
         </div>
         <button class="cat-peek-handle" id="catInboxHandle" type="button" aria-label="Pull up normal inbox">
           <span class="cat-peek" aria-hidden="true">
@@ -877,14 +1020,30 @@ function resetInboxBookmarkPull() {
   inboxBookmarkDrag = null;
 }
 
-function renderWheelSurface(sliceAngle) {
+function renderWheelSurface(sliceAngle, items = homeModules) {
   return `
     <svg class="wheel-surface" viewBox="0 0 ${wheel.size} ${wheel.size}" aria-hidden="true">
-      ${modules
+      <defs>
+        <radialGradient id="homeSegmentGradient" gradientUnits="userSpaceOnUse" cx="${wheel.center}" cy="${wheel.center}" r="${wheel.outerRadius}">
+          <stop offset="0%" stop-color="#05040c" stop-opacity="1"></stop>
+          <stop offset="34%" stop-color="#05040c" stop-opacity="0.98"></stop>
+          <stop offset="43%" stop-color="#151020" stop-opacity="0.84"></stop>
+          <stop offset="58%" stop-color="#7a684f" stop-opacity="0.42"></stop>
+          <stop offset="100%" stop-color="#f6dfaa" stop-opacity="0.56"></stop>
+        </radialGradient>
+        <radialGradient id="homeSegmentActiveGradient" gradientUnits="userSpaceOnUse" cx="${wheel.center}" cy="${wheel.center}" r="${wheel.outerRadius}">
+          <stop offset="0%" stop-color="#05040c" stop-opacity="1"></stop>
+          <stop offset="34%" stop-color="#05040c" stop-opacity="0.98"></stop>
+          <stop offset="43%" stop-color="#18111d" stop-opacity="0.82"></stop>
+          <stop offset="58%" stop-color="#a67f35" stop-opacity="0.54"></stop>
+          <stop offset="100%" stop-color="#f4bf45" stop-opacity="0.82"></stop>
+        </radialGradient>
+      </defs>
+      ${items
         .map((module) => {
           const angle = getModuleAngle(module.id);
-          const start = angle - sliceAngle / 2;
-          const end = angle + sliceAngle / 2;
+          const start = angle - sliceAngle / 2 + wheel.segmentGapDegrees / 2;
+          const end = angle + sliceAngle / 2 - wheel.segmentGapDegrees / 2;
           const segmentPath = describeSegment(start, end);
           return `
             <path class="wheel-segment" data-wheel-module="${module.id}" d="${segmentPath}" style="--fill: ${module.wheelColor}; --active-fill: ${module.activeWheelColor}; --icon-color: ${module.iconColor}"></path>
@@ -898,20 +1057,29 @@ function renderWheelSurface(sliceAngle) {
 }
 
 function getModuleAngle(moduleId) {
-  const index = modules.findIndex((module) => module.id === moduleId);
-  return index < 0 ? 0 : index * (360 / modules.length);
+  const index = homeModules.findIndex((module) => module.id === moduleId);
+  return index < 0 ? 0 : index * (360 / homeModules.length);
 }
 
 function describeSegment(startAngle, endAngle) {
-  const outerStart = polarPoint(wheel.outerRadius, startAngle);
-  const outerEnd = polarPoint(wheel.outerRadius, endAngle);
+  const sliceSpan = endAngle - startAngle;
+  const cornerDegrees = Math.min((wheel.cornerRadius / wheel.outerRadius) * (180 / Math.PI), sliceSpan / 5);
+  const outerStartEdge = polarPoint(wheel.outerRadius - wheel.cornerRadius, startAngle);
+  const outerStartControl = polarPoint(wheel.outerRadius, startAngle);
+  const outerStartRounded = polarPoint(wheel.outerRadius, startAngle + cornerDegrees);
+  const outerEndRounded = polarPoint(wheel.outerRadius, endAngle - cornerDegrees);
+  const outerEndControl = polarPoint(wheel.outerRadius, endAngle);
+  const outerEndEdge = polarPoint(wheel.outerRadius - wheel.cornerRadius, endAngle);
   const innerEnd = polarPoint(wheel.innerRadius, endAngle);
   const innerStart = polarPoint(wheel.innerRadius, startAngle);
-  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+  const largeArc = sliceSpan > 180 ? 1 : 0;
 
   return [
-    `M ${outerStart.x} ${outerStart.y}`,
-    `A ${wheel.outerRadius} ${wheel.outerRadius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `M ${innerStart.x} ${innerStart.y}`,
+    `L ${outerStartEdge.x} ${outerStartEdge.y}`,
+    `Q ${outerStartControl.x} ${outerStartControl.y} ${outerStartRounded.x} ${outerStartRounded.y}`,
+    `A ${wheel.outerRadius} ${wheel.outerRadius} 0 ${largeArc} 1 ${outerEndRounded.x} ${outerEndRounded.y}`,
+    `Q ${outerEndControl.x} ${outerEndControl.y} ${outerEndEdge.x} ${outerEndEdge.y}`,
     `L ${innerEnd.x} ${innerEnd.y}`,
     `A ${wheel.innerRadius} ${wheel.innerRadius} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y}`,
     "Z",
@@ -930,12 +1098,10 @@ function round(value) {
   return Math.round(value * 1000) / 1000;
 }
 
-function startDrag(event, center, stage, line, inputType) {
-  if (dragState) return;
+function startCenterPress(event, center, stage, line) {
+  if (dragState || centerPressState) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
   event.preventDefault();
-  if (inputType === "pointer") {
-    center.setPointerCapture(event.pointerId);
-  }
   const centerRect = center.getBoundingClientRect();
   const origin = {
     x: centerRect.left + centerRect.width / 2,
@@ -943,36 +1109,106 @@ function startDrag(event, center, stage, line, inputType) {
   };
   const point = getEventPoint(event);
 
-  dragState = {
-    pointerId: event.pointerId ?? null,
-    inputType,
+  centerPressState = {
+    pointerId: event.pointerId,
     origin,
     maxDistance: 0,
-    target: null,
     center,
     stage,
     line,
+    latestPoint: point,
+    longPressStarted: false,
+    timer: window.setTimeout(() => startCenterLongPress(), CENTER_LONG_PRESS_MS),
   };
 
-  center.classList.add("is-dragging");
-  line.classList.add("is-visible");
-  updateDragFromPoint(point.x, point.y);
+  center.setPointerCapture?.(event.pointerId);
+  center.addEventListener("pointermove", updateCenterPress);
+  center.addEventListener("pointerup", endCenterPress, { once: true });
+  center.addEventListener("pointercancel", cancelCenterPress, { once: true });
+  window.addEventListener("pointermove", updateCenterPress);
+  window.addEventListener("pointerup", endCenterPress, { once: true });
+  window.addEventListener("pointercancel", cancelCenterPress, { once: true });
+}
 
-  if (inputType === "pointer") {
-    center.addEventListener("pointermove", updateDrag);
-    center.addEventListener("pointerup", endDrag, { once: true });
-    center.addEventListener("pointercancel", cancelDrag, { once: true });
-    window.addEventListener("pointermove", updateDrag);
-    window.addEventListener("pointerup", endDrag, { once: true });
-    window.addEventListener("pointercancel", cancelDrag, { once: true });
-  } else if (inputType === "mouse") {
-    window.addEventListener("mousemove", updateDrag);
-    window.addEventListener("mouseup", endDrag, { once: true });
-  } else {
-    window.addEventListener("touchmove", updateDrag, { passive: false });
-    window.addEventListener("touchend", endDrag, { once: true });
-    window.addEventListener("touchcancel", cancelDrag, { once: true });
+function updateCenterPress(event) {
+  if (!centerPressState || event.pointerId !== centerPressState.pointerId) return;
+  if (event.cancelable) event.preventDefault();
+  const point = getEventPoint(event);
+  const dx = point.x - centerPressState.origin.x;
+  const dy = point.y - centerPressState.origin.y;
+  const distance = Math.hypot(dx, dy);
+
+  centerPressState.latestPoint = point;
+  centerPressState.maxDistance = Math.max(centerPressState.maxDistance, distance);
+
+  if (!centerPressState.longPressStarted && distance > CENTER_DRAG_START_DISTANCE) {
+    startCenterLongPress(point);
   }
+  if (centerPressState.longPressStarted) {
+    updateDragFromPoint(point.x, point.y);
+  }
+}
+
+function startCenterLongPress(point = centerPressState?.latestPoint) {
+  if (!centerPressState || centerPressState.longPressStarted || dragState) return;
+  window.clearTimeout(centerPressState.timer);
+  centerPressState.longPressStarted = true;
+  centerPressState.stage.classList.add("is-wheel-expanded");
+  vibrate(8);
+
+  dragState = {
+    pointerId: centerPressState.pointerId,
+    inputType: "pointer",
+    origin: centerPressState.origin,
+    maxDistance: centerPressState.maxDistance,
+    target: null,
+    center: centerPressState.center,
+    stage: centerPressState.stage,
+    line: centerPressState.line,
+  };
+
+  dragState.center.classList.add("is-dragging");
+  dragState.line.classList.add("is-visible");
+  if (point) {
+    updateDragFromPoint(point.x, point.y);
+  }
+}
+
+function endCenterPress(event) {
+  if (!centerPressState || event.pointerId !== centerPressState.pointerId) return;
+  if (event.cancelable) event.preventDefault();
+
+  const wasLongPress = centerPressState.longPressStarted;
+  const center = centerPressState.center;
+  center.dataset.pointerHandled = "true";
+
+  cleanupCenterPress();
+
+  if (wasLongPress) {
+    endDrag(event);
+    return;
+  }
+
+  openRoute("ai");
+}
+
+function cancelCenterPress(event) {
+  if (centerPressState && event?.pointerId !== undefined && event.pointerId !== centerPressState.pointerId) return;
+  const wasLongPress = centerPressState?.longPressStarted;
+  cleanupCenterPress();
+  if (wasLongPress) cancelDrag();
+}
+
+function cleanupCenterPress() {
+  if (!centerPressState) return;
+  window.clearTimeout(centerPressState.timer);
+  centerPressState.center.removeEventListener("pointermove", updateCenterPress);
+  centerPressState.center.removeEventListener("pointerup", endCenterPress);
+  centerPressState.center.removeEventListener("pointercancel", cancelCenterPress);
+  window.removeEventListener("pointermove", updateCenterPress);
+  window.removeEventListener("pointerup", endCenterPress);
+  window.removeEventListener("pointercancel", cancelCenterPress);
+  centerPressState = null;
 }
 
 function updateDrag(event) {
@@ -1027,11 +1263,11 @@ function getModuleFromPoint(x, y) {
 
   if (radius < inner * 0.72 || radius > outer * 1.05) return null;
 
-  const sliceAngle = 360 / modules.length;
+  const sliceAngle = 360 / homeModules.length;
   const angle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
   const normalized = (angle + 360) % 360;
-  const index = Math.round(normalized / sliceAngle) % modules.length;
-  return modules[index];
+  const index = Math.round(normalized / sliceAngle) % homeModules.length;
+  return homeModules[index];
 }
 
 function endDrag(event) {
@@ -1054,6 +1290,7 @@ function cancelDrag() {
 
 function resetDrag() {
   if (!dragState) return;
+  dragState.stage.classList.remove("is-wheel-expanded");
   dragState.center.classList.remove("is-dragging");
   dragState.line.classList.remove("is-visible");
   dragState.line.style.width = "0";
@@ -1087,9 +1324,9 @@ function setWheelFocus(moduleId, mode = "idle") {
       node.classList.remove("is-target");
     });
     center.style.removeProperty("--focus-color");
-    label.textContent = "1Mail AI";
+    label.textContent = "1Mail";
     label.style.removeProperty("--label-size");
-    hint.textContent = "Ask anything about your mailbox";
+    hint.textContent = "Ask Anything";
     fitOneLineText(center);
     return;
   }
@@ -1109,10 +1346,10 @@ function setWheelFocus(moduleId, mode = "idle") {
 
 function getCenterLabelSize(label) {
   const length = label.length;
-  if (length > 12) return "14px";
-  if (length > 9) return "17px";
-  if (length > 7) return "20px";
-  return "25px";
+  if (length > 12) return "10px";
+  if (length > 9) return "12px";
+  if (length > 7) return "15.5px";
+  return "19px";
 }
 
 function fitOneLineText(root = document) {
@@ -1146,6 +1383,8 @@ function getEventPoint(event) {
 }
 
 function renderSettingsPage() {
+  app.classList.remove("is-home-view");
+  app.classList.remove("is-make-section-view");
   app.classList.add("is-page-view");
   const profile = getStoredGmailProfile();
   const displayEmail = profile?.emailAddress || "alex@example.com";
@@ -1276,6 +1515,8 @@ function renderGmailConnectPanel() {
 }
 
 function renderAiPage() {
+  app.classList.remove("is-home-view");
+  app.classList.remove("is-make-section-view");
   app.classList.add("is-page-view");
   app.innerHTML = `
     <div class="view page ai-page">
@@ -1285,6 +1526,7 @@ function renderAiPage() {
           <p class="eyebrow">1Mail AI</p>
           <h1 class="page-title">Ask your mailbox</h1>
           <p class="page-subtitle">Search, summarize, and act across email</p>
+          <span class="ai-experiment-badge">Experimental mailbox context search</span>
         </div>
       </header>
 
@@ -1495,6 +1737,13 @@ function getAiReply(prompt) {
 }
 
 function renderPage(id) {
+  if (makeSectionIds.has(id)) {
+    renderMakeSectionPage(id);
+    return;
+  }
+
+  app.classList.remove("is-home-view");
+  app.classList.remove("is-make-section-view");
   app.classList.add("is-page-view");
   const page = pages[id];
   const color = modules.find((module) => module.id === id)?.accent || "#2458ff";
@@ -1545,6 +1794,377 @@ function renderPage(id) {
   }
   setupMailDetailCards();
   fitOneLineText();
+}
+
+function renderMakeSectionPage(id) {
+  app.classList.remove("is-home-view");
+  app.classList.add("is-page-view", "is-make-section-view");
+
+  const meta = makeSectionMeta[id];
+  const page = pages[id];
+  const tabs = meta.tabs || [];
+  const activeTabIndex = tabs.length ? Math.min(activePageTabs[id] ?? 0, tabs.length - 1) : 0;
+  const items = getMakeSectionItems(id, activeTabIndex);
+  const metric = getMakeSectionMetric(id, items);
+
+  app.innerHTML = `
+    <div class="view make-section-page make-section-${id}">
+      <header class="make-section-nav">
+        <button class="make-back-button" type="button" data-make-back aria-label="Back">${icons.arrowLeft}</button>
+      </header>
+
+      <section class="make-section-hero">
+        <h1>${escapeHtml(meta.title)}</h1>
+        <p>${escapeHtml(meta.subtitle)}</p>
+        ${metric ? `<strong class="make-section-metric" style="--metric-color: ${meta.metricColor}">${escapeHtml(metric)}</strong>` : ""}
+      </section>
+
+      ${renderMakeTabs(id, tabs, activeTabIndex)}
+      ${renderMakeCards(id, items)}
+      ${renderMakeUnsubscribeModal()}
+    </div>
+  `;
+
+  setupMakeSectionPage(id);
+}
+
+function renderMakeTabs(pageId, tabs = [], activeIndex = 0) {
+  if (!tabs.length) return "";
+  return `
+    <div class="make-tabs" role="tablist" aria-label="${escapeAttribute(makeSectionMeta[pageId].title)} tabs">
+      ${tabs
+        .map(
+          (tab, index) => `
+            <button
+              class="make-tab${index === activeIndex ? " is-active" : ""}"
+              type="button"
+              role="tab"
+              aria-selected="${index === activeIndex}"
+              data-make-tab="${index}"
+            >
+              ${escapeHtml(tab)}
+            </button>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function getMakeSectionMetric(id, visibleItems = []) {
+  if (id === "logins") return "";
+  if (id === "bills") return getBillTotal(visibleItems.map((item) => item.raw || []));
+  if (id === "subscriptions") {
+    const page = pages.subscriptions;
+    const base = Number(page.metric) || getAllSubscriptionItems().length;
+    const unsubscribedCount = getAllSubscriptionItems().filter((item) => isSubscriptionUnsubscribed(item[1])).length;
+    return String(Math.max(0, base - unsubscribedCount));
+  }
+  return pages[id]?.metric || "";
+}
+
+function getMakeSectionItems(id, activeTabIndex = 0) {
+  if (id === "calendar") return getMakeCalendarItems(activeTabIndex);
+  if (id === "logins") return getMakeTraceItems();
+
+  const page = pages[id];
+  const tabItems = page.tabViews?.[activeTabIndex]?.items;
+  const items = tabItems || page.items || [];
+
+  if (id === "subscriptions") {
+    return items
+      .filter((item) => !isSubscriptionUnsubscribed(item[1]))
+      .map((item, index) => normalizeMakeItem(id, activeTabIndex, item, index));
+  }
+
+  return items
+    .map((item, index) => normalizeMakeItem(id, activeTabIndex, item, index))
+    .filter((item) => !makeDeletedCards.has(item.key));
+}
+
+function getAllSubscriptionItems() {
+  const tabViews = pages.subscriptions.tabViews || [];
+  return tabViews.flatMap((view) => view.items || []);
+}
+
+function getMakeCalendarItems(activeTabIndex = 0) {
+  const page = pages.calendar;
+  const timeline = page.tabViews?.[activeTabIndex]?.timeline || page.timeline || [];
+  return timeline
+    .map((item, index) => {
+      const [time, title, subtitle] = item;
+      return normalizeMakeItem(
+        "calendar",
+        activeTabIndex,
+        [activeTabIndex === 1 ? "plane" : "calendar", title, time, "", "#efbd38", { ...getItemMeta(item), context: subtitle }],
+        index,
+      );
+    })
+    .filter((item) => !makeDeletedCards.has(item.key));
+}
+
+function getMakeTraceItems() {
+  const page = pages.logins;
+  const rawItems = page.tabViews?.length ? page.tabViews.flatMap((view) => view.items || []) : page.items || [];
+  const seen = new Set();
+  return rawItems
+    .map((item, index) => normalizeMakeItem("logins", 0, item, index))
+    .filter((item) => {
+      const key = item.messageId || `${item.title}-${item.subtitle}`;
+      if (seen.has(key) || makeDeletedCards.has(item.key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function normalizeMakeItem(sectionId, tabIndex, item = [], index = 0) {
+  const [icon, title, subtitle, side, color] = item;
+  const itemTitle = title || "Untitled";
+  const messageId = getItemMessageId(item);
+  return {
+    color: color || "#efbd38",
+    icon: getMakeItemIcon(sectionId, icon, tabIndex),
+    key: makeItemKey(sectionId, tabIndex, item, index),
+    messageId,
+    raw: item,
+    side: side || "",
+    subtitle: subtitle || "",
+    title: itemTitle,
+  };
+}
+
+function getMakeItemIcon(sectionId, icon, tabIndex = 0) {
+  if (sectionId === "subscriptions") return "ban";
+  if (sectionId === "logins") return "footprint";
+  if (sectionId === "security") return icon === "shield" ? "shield" : "alert";
+  if (sectionId === "calendar") return tabIndex === 1 ? "plane" : "calendar";
+  if (icon === "stopHand") return "ban";
+  return icons[icon] ? icon : "receipt";
+}
+
+function makeItemKey(sectionId, tabIndex, item = [], index = 0) {
+  const messageId = getItemMessageId(item);
+  return [sectionId, tabIndex, messageId || item[1] || "item", item[2] || "", index].join("::");
+}
+
+function renderMakeCards(sectionId, items = []) {
+  if (!items.length) return renderMakeEmptyState(makeSectionMeta[sectionId].empty);
+  return `
+    <section class="make-card-stack">
+      ${items.map((item) => renderMakeCard(sectionId, item)).join("")}
+    </section>
+  `;
+}
+
+function renderMakeCard(sectionId, item) {
+  const expanded = Boolean(makeExpandedCards[item.key]);
+  const detailAttr = item.messageId ? getMailDetailAttributes(item.raw, item.title) : "";
+  const toggleAttr = item.messageId ? "" : `data-make-card-toggle="${escapeAttribute(item.key)}" role="button" tabindex="0"`;
+  const right = renderMakeCardRight(sectionId, item);
+  const iconButton = renderMakeCardIcon(sectionId, item);
+
+  return `
+    <article
+      class="make-card${expanded ? " is-expanded" : ""}${item.messageId ? " mail-detail-card" : ""}"
+      style="--item-color: ${item.color}"
+      ${detailAttr}
+      ${toggleAttr}
+    >
+      ${iconButton}
+      <span class="make-card-main">
+        <strong>${escapeHtml(item.title)}</strong>
+        <span>${escapeHtml(item.subtitle)}</span>
+      </span>
+      ${right}
+      ${expanded ? renderMakeCardDetail(sectionId, item) : ""}
+    </article>
+  `;
+}
+
+function renderMakeCardIcon(sectionId, item) {
+  const icon = icons[item.icon] || icons.receipt;
+  if (sectionId === "subscriptions") {
+    return `
+      <button
+        class="make-card-icon make-unsubscribe-icon"
+        type="button"
+        data-make-unsubscribe="${escapeAttribute(item.key)}"
+        data-make-unsubscribe-source="${escapeAttribute(item.title)}"
+        data-make-unsubscribe-label="${escapeAttribute(getSubscriptionBrandLabel(item))}"
+        aria-label="Unsubscribe ${escapeAttribute(item.title)}"
+      >${icon}</button>
+    `;
+  }
+
+  return `
+    <button
+      class="make-card-icon"
+      type="button"
+      data-make-expand="${escapeAttribute(item.key)}"
+      aria-label="Expand ${escapeAttribute(item.title)}"
+      aria-expanded="${Boolean(makeExpandedCards[item.key])}"
+    >${icon}</button>
+  `;
+}
+
+function renderMakeCardRight(sectionId, item) {
+  if (sectionId === "subscriptions" || sectionId === "calendar") return "";
+  if (sectionId === "logins") {
+    return `
+      <button
+        class="make-delete-button"
+        type="button"
+        data-make-delete="${escapeAttribute(item.key)}"
+        data-make-delete-message="${escapeAttribute(item.messageId)}"
+      >
+        Delete
+      </button>
+    `;
+  }
+
+  const rightClass = sectionId === "security" ? "make-card-status" : "make-card-amount";
+  return item.side ? `<span class="${rightClass}">${escapeHtml(item.side)}</span>` : "";
+}
+
+function renderMakeCardDetail(sectionId, item) {
+  const detail = getMakeCardDetail(sectionId, item);
+  return `
+    <div class="make-card-detail">
+      <p>${escapeHtml(detail.body)}</p>
+      <span>ATTACHMENTS</span>
+      <div class="make-attachment-list">
+        ${detail.attachments.map((attachment) => `<em>${escapeHtml(attachment)}</em>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function getMakeCardDetail(sectionId, item) {
+  const message = item.messageId ? getStoredMessageById(item.messageId) : null;
+  if (message) {
+    return {
+      attachments: message.attachmentNames?.length ? message.attachmentNames : ["No attachments"],
+      body: getMessageFullText(message).slice(0, 360) || "No readable body text was captured for this email.",
+    };
+  }
+
+  return (
+    makeItemDetails[sectionId]?.[item.title] || {
+      attachments: ["No attachments"],
+      body: item.subtitle
+        ? `${item.title} was detected from an email related to ${item.subtitle}.`
+        : `${item.title} was detected from the mailbox.`,
+    }
+  );
+}
+
+function renderMakeEmptyState(message) {
+  return `
+    <section class="make-empty-state">
+      <span>${escapeHtml(message)}</span>
+    </section>
+  `;
+}
+
+function renderMakeUnsubscribeModal() {
+  if (!makeUnsubscribeModal) return "";
+  return `
+    <div class="make-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="makeUnsubTitle">
+      <section class="make-unsub-modal">
+        <span class="make-unsub-check">${icons.check}</span>
+        <h2 id="makeUnsubTitle">UNSUBSCRIBED</h2>
+        <p>You have been successfully removed from ${escapeHtml(makeUnsubscribeModal.label)} mailing list.</p>
+        <button class="make-unsub-done" type="button" data-make-unsub-done>Done</button>
+      </section>
+    </div>
+  `;
+}
+
+function setupMakeSectionPage(id) {
+  document.querySelector("[data-make-back]").addEventListener("click", () => openRoute("home"));
+
+  document.querySelectorAll("[data-make-tab]").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      activePageTabs[id] = Number(tab.dataset.makeTab);
+      renderMakeSectionPage(id);
+    });
+  });
+
+  document.querySelectorAll("[data-make-expand]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleMakeCard(button.dataset.makeExpand);
+    });
+  });
+
+  document.querySelectorAll("[data-make-card-toggle]").forEach((card) => {
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("button, a")) return;
+      toggleMakeCard(card.dataset.makeCardToggle);
+    });
+    card.addEventListener("keydown", (event) => {
+      if (event.target.closest("button, a")) return;
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggleMakeCard(card.dataset.makeCardToggle);
+    });
+  });
+
+  document.querySelectorAll("[data-make-unsubscribe]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      markSubscriptionUnsubscribed(button.dataset.makeUnsubscribeSource);
+      makeUnsubscribeModal = {
+        label: button.dataset.makeUnsubscribeLabel || button.dataset.makeUnsubscribeSource || "this sender",
+      };
+      renderMakeSectionPage("subscriptions");
+    });
+  });
+
+  document.querySelectorAll("[data-make-delete]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      deleteMakeTraceCard(button);
+    });
+  });
+
+  document.querySelector("[data-make-unsub-done]")?.addEventListener("click", () => {
+    makeUnsubscribeModal = null;
+    renderMakeSectionPage("subscriptions");
+  });
+
+  setupMailDetailCards();
+}
+
+function toggleMakeCard(key) {
+  if (!key) return;
+  makeExpandedCards[key] = !makeExpandedCards[key];
+  renderMakeSectionPage(route);
+}
+
+async function deleteMakeTraceCard(button) {
+  const key = button.dataset.makeDelete;
+  const messageId = button.dataset.makeDeleteMessage;
+  button.disabled = true;
+  button.textContent = "Deleting";
+
+  try {
+    if (messageId) {
+      await trashGmailMessage(messageId);
+      removeMessageFromStoredDigest(messageId);
+    }
+    makeDeletedCards.add(key);
+    renderMakeSectionPage("logins");
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "Delete";
+  }
+}
+
+function getSubscriptionBrandLabel(item) {
+  const domain = item.subtitle || item.title.split("@")[1] || item.title;
+  const root = domain.replace(/^www\./, "").split(".")[0] || item.title;
+  return root.charAt(0).toUpperCase() + root.slice(1);
 }
 
 function renderMetric(page, color, metric = page.metric) {
@@ -2207,6 +2827,88 @@ function setupMailDetailCards() {
       showMailDetail(card.dataset.mailDetail);
     });
   });
+}
+
+function showUserAgreementIfNeeded() {
+  if (hasAcceptedUserAgreement()) return;
+  if (document.querySelector(".user-agreement-overlay")) return;
+
+  document.body.insertAdjacentHTML(
+    "beforeend",
+    `
+      <div class="user-agreement-overlay" role="dialog" aria-modal="true" aria-labelledby="userAgreementTitle">
+        <section class="user-agreement-sheet">
+          <div class="user-agreement-brand" aria-label="1Mail">1MAIL</div>
+          <header class="user-agreement-header">
+            <h2 id="userAgreementTitle"><span>User Data</span><span>Notice and</span><span>Consent</span></h2>
+            <p>Please read this notice before connecting a mailbox. By continuing, you give 1Mail permission to process mailbox data only for the user-facing features described below.</p>
+          </header>
+
+          <div class="user-agreement-body">
+            <section>
+              <h3>Data we access</h3>
+              <p>When you connect Gmail or another supported mailbox, 1Mail may access email metadata, sender information, subject lines, labels, timestamps, message snippets, and readable message text needed to classify and organize your mailbox.</p>
+            </section>
+            <section>
+              <h3>How we use mailbox data</h3>
+              <p>1Mail uses mailbox data to provide visible app features, including inbox summaries, bill and receipt detection, subscription management, security notices, login confirmations, meetings, appointments, travel reminders, search, and user-requested email actions.</p>
+            </section>
+            <section>
+              <h3>Attachments</h3>
+              <p>1Mail does not open, download, summarize, or analyze the contents of attachments. We may display or process attachment file names only when available, for example to identify that an email included <em>invoice.pdf</em>.</p>
+            </section>
+            <section>
+              <h3>AI and service providers</h3>
+              <p>If cloud AI parsing is enabled, selected email text may be sent to the configured AI/parser service solely to classify, summarize, or prepare user-facing mailbox actions. 1Mail redacts common sensitive values where practical before sending.</p>
+            </section>
+            <section>
+              <h3>What we do not do</h3>
+              <ul>
+                <li>We do not sell mailbox content, email metadata, or personal information.</li>
+                <li>We do not use mailbox data for advertising, retargeting, or sale to data brokers.</li>
+                <li>We do not delete, unsubscribe, label, or modify email unless you request that action.</li>
+              </ul>
+            </section>
+          </div>
+
+          <label class="user-agreement-check">
+            <input type="checkbox" data-user-agreement-check />
+            <span>I have read this notice and agree to let 1Mail process my mailbox data for the purposes described above.</span>
+          </label>
+
+          <button class="user-agreement-accept" type="button" data-user-agreement-accept disabled>
+            Continue to 1Mail
+          </button>
+        </section>
+      </div>
+    `,
+  );
+
+  const overlay = document.querySelector(".user-agreement-overlay");
+  const checkbox = overlay.querySelector("[data-user-agreement-check]");
+  const acceptButton = overlay.querySelector("[data-user-agreement-accept]");
+  checkbox.addEventListener("change", () => {
+    acceptButton.disabled = !checkbox.checked;
+  });
+  acceptButton.addEventListener("click", () => {
+    localStorage.setItem(
+      USER_AGREEMENT_STORAGE_KEY,
+      JSON.stringify({
+        acceptedAt: new Date().toISOString(),
+        version: USER_AGREEMENT_VERSION,
+      }),
+    );
+    overlay.remove();
+  });
+}
+
+function hasAcceptedUserAgreement() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(USER_AGREEMENT_STORAGE_KEY) || "null");
+    return stored?.version === USER_AGREEMENT_VERSION;
+  } catch {
+    return false;
+  }
 }
 
 function showMailDetail(messageId) {
