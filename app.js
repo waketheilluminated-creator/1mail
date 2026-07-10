@@ -57,6 +57,8 @@ const icons = {
     '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
   trash:
     '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/></svg>',
+  star:
+    '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.6 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9Z"/></svg>',
 };
 
 const modules = [
@@ -79,6 +81,16 @@ const modules = [
     activeWheelColor: "#397892",
     iconColor: "#80d2f4",
     wheelDescription: "Meeting reminders and travel bookings",
+  },
+  {
+    id: "starred",
+    label: "Starred",
+    icon: "star",
+    accent: "#efbd38",
+    wheelColor: "#755f31",
+    activeWheelColor: "#92763d",
+    iconColor: "#f4c44c",
+    wheelDescription: "Important mail you marked",
   },
   {
     id: "security",
@@ -272,6 +284,33 @@ const pages = {
       },
     ],
   },
+  starred: {
+    eyebrow: "Starred",
+    title: "Starred",
+    subtitle: "Marked email",
+    metric: "3",
+    copy: "Keep what matters within reach.",
+    pills: ["Starred"],
+    actions: [
+      ["Preview", "eye", "secondary", null],
+      ["Archive", "archive", "secondary", null],
+      ["Done", "check", "", null],
+    ],
+    items: [
+      ["star", "Investor update", "maya@northstar.studio", "", "#efbd38"],
+      ["star", "Steam purchase receipt", "Steam Support", "", "#efbd38"],
+      ["star", "Travel confirmation", "Air Canada", "", "#efbd38"],
+    ],
+    tabViews: [
+      {
+        items: [
+          ["star", "Investor update", "maya@northstar.studio", "", "#efbd38"],
+          ["star", "Steam purchase receipt", "Steam Support", "", "#efbd38"],
+          ["star", "Travel confirmation", "Air Canada", "", "#efbd38"],
+        ],
+      },
+    ],
+  },
   security: {
     eyebrow: "Security",
     title: "Risk check",
@@ -421,7 +460,8 @@ const billCancelGuides = {
   },
 };
 
-const GMAIL_SYNC_QUERY = "newer_than:7d";
+const EMAIL_LOOKBACK_STORAGE_KEY = "oneMailEmailLookbackDays";
+const DEFAULT_EMAIL_LOOKBACK_DAYS = 7;
 const GMAIL_SYNC_BATCH_SIZE = 100;
 const GMAIL_SYNC_MAX_MESSAGES = 200;
 const GMAIL_BODY_TEXT_LIMIT = 50000;
@@ -564,15 +604,7 @@ const settingsGroups = [
   {
     title: "Mail controls",
     items: [
-      ["archive", "Labels and filters", "Auto labels, saved rules, undo window", "On"],
-    ],
-  },
-  {
-    title: "Personal space",
-    items: [
-      ["bookmark", "Saved items", "Pinned emails, receipts, trips, notes", "14 saved"],
-      ["calendar", "Calendar and reminders", "Appointments, travel, bill reminders", "Synced"],
-      ["shield", "Privacy and security", "Data retention, action log, phishing guard", "Private"],
+      ["calendar", "Email lookback window", "How many days of email 1Mail processes", "7 days"],
     ],
   },
   {
@@ -602,29 +634,11 @@ const settingsOptionDetails = {
     controls: ["Gmail", "Outlook", "Latest-week sync"],
     action: "Manage access",
   },
-  "Labels and filters": {
-    summary: "Control automatic labels, saved rules, and how long 1Mail keeps an undo window after organizing messages.",
-    statusLabel: "Automation",
-    controls: ["Auto labels", "Saved rules", "Undo window"],
-    action: "Edit rules",
-  },
-  "Saved items": {
-    summary: "Pinned emails, receipts, trips, and notes live here so useful mailbox context does not disappear into the inbox flow.",
-    statusLabel: "Saved space",
-    controls: ["Pinned receipts", "Trips", "Notes"],
-    action: "View saved",
-  },
-  "Calendar and reminders": {
-    summary: "Manage appointment, travel, bill, and meeting reminders created from email text and calendar invite signals.",
-    statusLabel: "Reminder sync",
-    controls: ["Apple Calendar", "Travel reminders", "Bill reminders"],
-    action: "Manage reminders",
-  },
-  "Privacy and security": {
-    summary: "Review data retention, redaction behavior, action history, phishing protection, and attachment handling.",
-    statusLabel: "Privacy posture",
-    controls: ["Text-only parsing", "Attachment names only", "Phishing guard"],
-    action: "Review privacy",
+  "Email lookback window": {
+    summary: "Choose how far back 1Mail should read email text when syncing and classifying your mailbox. Shorter windows are faster and quieter.",
+    statusLabel: "Current range",
+    controls: ["7 days", "14 days", "30 days", "90 days"],
+    action: "Save range",
   },
   "Billing and subscription": {
     summary: "Manage the 1Mail plan, invoices, payment method, and usage limits for AI-powered mailbox parsing.",
@@ -634,13 +648,32 @@ const settingsOptionDetails = {
   },
 };
 
+function getEmailLookbackDays() {
+  const value = Number(localStorage.getItem(EMAIL_LOOKBACK_STORAGE_KEY));
+  return [7, 14, 30, 90].includes(value) ? value : DEFAULT_EMAIL_LOOKBACK_DAYS;
+}
+
+function setEmailLookbackDays(days) {
+  const normalized = [7, 14, 30, 90].includes(Number(days)) ? Number(days) : DEFAULT_EMAIL_LOOKBACK_DAYS;
+  localStorage.setItem(EMAIL_LOOKBACK_STORAGE_KEY, String(normalized));
+  return normalized;
+}
+
+function getEmailLookbackLabel() {
+  return `${getEmailLookbackDays()} days`;
+}
+
+function getGmailSyncQuery() {
+  return `newer_than:${getEmailLookbackDays()}d`;
+}
+
 let nextAiActionId = 1;
 const pendingAiActions = {};
 let inboxBookmarkDrag = null;
 let suppressInboxBookmarkClick = false;
 let gmailConnectStatus = "";
 let gmailSyncInFlight = false;
-const makeSectionIds = new Set(["calendar", "bills", "security", "subscriptions", "logins"]);
+const makeSectionIds = new Set(["calendar", "starred", "bills", "security", "subscriptions", "logins"]);
 const makeExpandedCards = {};
 const makeDeletedCards = new Set();
 let makeUnsubscribeModal = null;
@@ -652,6 +685,13 @@ const makeSectionMeta = {
     metricColor: "#22c88b",
     tabs: ["Appointments", "Travel"],
     empty: "No appointment emails matched this tab.",
+  },
+  starred: {
+    title: "STARRED",
+    subtitle: "Important email, kept close.",
+    metricColor: "#efbd38",
+    tabs: ["Starred"],
+    empty: "No starred emails matched this time frame.",
   },
   bills: {
     title: "BILLS",
@@ -1486,21 +1526,24 @@ function renderSettingsPage() {
                 <div class="settings-list">
                   ${group.items
                     .map(
-                      ([icon, title, subtitle, status]) => `
-                        <button
-                          class="settings-row"
-                          type="button"
-                          data-setting-option="${escapeAttribute(title)}"
-                          aria-label="Open ${escapeAttribute(title)} settings"
-                        >
-                          <span class="settings-row-icon">${icons[icon]}</span>
-                          <span class="settings-row-main">
-                            <strong>${title}</strong>
-                            <span>${subtitle}</span>
-                          </span>
-                          <span class="settings-row-status">${status}</span>
-                        </button>
-                      `,
+                      ([icon, title, subtitle, status]) => {
+                        const effectiveStatus = title === "Email lookback window" ? getEmailLookbackLabel() : status;
+                        return `
+                          <button
+                            class="settings-row"
+                            type="button"
+                            data-setting-option="${escapeAttribute(title)}"
+                            aria-label="Open ${escapeAttribute(title)} settings"
+                          >
+                            <span class="settings-row-icon">${icons[icon]}</span>
+                            <span class="settings-row-main">
+                              <strong>${title}</strong>
+                              <span>${subtitle}</span>
+                            </span>
+                            <span class="settings-row-status">${effectiveStatus}</span>
+                          </button>
+                        `;
+                      },
                     )
                     .join("")}
                 </div>
@@ -1557,6 +1600,7 @@ function openSettingsOption(title = "") {
   };
   const row = settingsGroups.flatMap((group) => group.items).find((item) => item[1] === title) || [];
   const [icon = "settings", itemTitle = title, subtitle = "", status = "On"] = row;
+  const effectiveStatus = title === "Email lookback window" ? getEmailLookbackLabel() : status;
   document.querySelector(".settings-detail-overlay")?.remove();
   const overlay = document.createElement("div");
   overlay.className = "settings-detail-overlay";
@@ -1575,16 +1619,17 @@ function openSettingsOption(title = "") {
       <p class="settings-detail-summary">${escapeHtml(detail.summary)}</p>
       <div class="settings-detail-status">
         <span>${escapeHtml(detail.statusLabel)}</span>
-        <strong>${escapeHtml(status)}</strong>
+        <strong data-settings-detail-status>${escapeHtml(effectiveStatus)}</strong>
       </div>
       <div class="settings-detail-controls">
         ${detail.controls
           .map(
             (control, index) => `
               <button
-                class="settings-detail-control${index === 0 ? " is-active" : ""}"
+                class="settings-detail-control${title === "Email lookback window" ? control === getEmailLookbackLabel() ? " is-active" : "" : index === 0 ? " is-active" : ""}"
                 type="button"
                 data-settings-control
+                data-settings-control-value="${escapeAttribute(control)}"
               >
                 <span>${escapeHtml(control)}</span>
                 <span class="settings-control-dot" aria-hidden="true"></span>
@@ -1606,6 +1651,16 @@ function openSettingsOption(title = "") {
   });
   overlay.querySelectorAll("[data-settings-control]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (title === "Email lookback window") {
+        const days = Number.parseInt(button.dataset.settingsControlValue || button.textContent, 10);
+        setEmailLookbackDays(days);
+        overlay.querySelectorAll("[data-settings-control]").forEach((control) => {
+          control.classList.toggle("is-active", control === button);
+        });
+        const status = overlay.querySelector("[data-settings-detail-status]");
+        if (status) status.textContent = getEmailLookbackLabel();
+        return;
+      }
       button.classList.toggle("is-active");
     });
   });
@@ -1616,12 +1671,13 @@ function renderGmailConnectPanel() {
   const profile = getStoredGmailProfile();
   const digest = getStoredGmailDigest();
   const isConfigured = isGmailConfigured(config);
+  const lookbackLabel = getEmailLookbackLabel();
   const status =
     gmailConnectStatus ||
     (digest
-      ? `Processed latest week: ${digest.scannedCount} emails, ${digest.unreadCount} unread.`
+      ? `Processed ${digest.lookbackLabel || lookbackLabel}: ${digest.scannedCount} emails, ${digest.unreadCount} unread.`
       : profile
-        ? `Connected as ${profile.emailAddress}. Process the latest week to update the app.`
+        ? `Connected as ${profile.emailAddress}. Process ${lookbackLabel} to update the app.`
         : "Gmail is not connected yet.");
   const buttonLabel = profile ? "Reconnect Gmail" : "Connect Gmail";
   const aiConfig = getAiParserConfig();
@@ -1632,7 +1688,7 @@ function renderGmailConnectPanel() {
     ? `Uses Google OAuth with Gmail read/modify access for prototype testing.${aiCopy}`
     : "Add your Google iOS OAuth client ID in oauth-config.js before testing on iPhone.";
   const processButton = profile
-    ? `<button class="gmail-process-button" type="button" data-gmail-process>Process latest week</button>`
+    ? `<button class="gmail-process-button" type="button" data-gmail-process>Process ${escapeHtml(lookbackLabel)}</button>`
     : "";
 
   return `
@@ -1991,6 +2047,7 @@ function renderMakeTabs(pageId, tabs = [], activeIndex = 0) {
 function getMakeSectionMetric(id, visibleItems = []) {
   if (id === "logins") return "";
   if (id === "bills") return getBillTotal(visibleItems.map((item) => item.raw || []));
+  if (id === "starred") return String(visibleItems.length);
   if (id === "subscriptions") {
     const page = pages.subscriptions;
     const base = Number(page.metric) || getAllSubscriptionItems().length;
@@ -2073,6 +2130,7 @@ function normalizeMakeItem(sectionId, tabIndex, item = [], index = 0) {
 function getMakeItemIcon(sectionId, icon, tabIndex = 0) {
   if (sectionId === "subscriptions") return "ban";
   if (sectionId === "logins") return "footprint";
+  if (sectionId === "starred") return "star";
   if (sectionId === "security") return icon === "shield" ? "shield" : "alert";
   if (sectionId === "calendar") return tabIndex === 1 ? "plane" : "calendar";
   if (icon === "stopHand") return "ban";
@@ -2145,7 +2203,7 @@ function renderMakeCardIcon(sectionId, item) {
 }
 
 function renderMakeCardRight(sectionId, item) {
-  if (sectionId === "subscriptions" || sectionId === "calendar") return "";
+  if (sectionId === "subscriptions" || sectionId === "calendar" || sectionId === "starred") return "";
   if (sectionId === "logins") {
     return `
       <button
@@ -3251,9 +3309,10 @@ async function processLatestWeekGmail(options = {}) {
   const { accessToken = "", silent = false } = options;
   if (gmailSyncInFlight) return null;
   gmailSyncInFlight = true;
+  const lookbackLabel = getEmailLookbackLabel();
 
   try {
-    if (!silent) setGmailConnectStatus("Processing the latest week of Gmail...");
+    if (!silent) setGmailConnectStatus(`Processing ${lookbackLabel} of Gmail...`);
     const token = accessToken || (await getValidGmailAccessToken());
     let messages = await fetchLatestWeekGmailMessages(token);
     try {
@@ -3266,7 +3325,7 @@ async function processLatestWeekGmail(options = {}) {
     const digest = buildGmailDigest(messages);
     localStorage.setItem("oneMailGmailDigest", JSON.stringify(digest));
     applyGmailDigest(digest);
-    setGmailConnectStatus(`Processed latest week: ${digest.scannedCount} emails, ${digest.unreadCount} unread.`);
+    setGmailConnectStatus(`Processed ${lookbackLabel}: ${digest.scannedCount} emails, ${digest.unreadCount} unread.`);
     render();
     return digest;
   } catch (error) {
@@ -3442,7 +3501,7 @@ async function fetchLatestWeekGmailMessages(accessToken) {
     const listUrl = new URL("https://gmail.googleapis.com/gmail/v1/users/me/messages");
     listUrl.searchParams.set("includeSpamTrash", "false");
     listUrl.searchParams.set("maxResults", String(Math.min(GMAIL_SYNC_BATCH_SIZE, GMAIL_SYNC_MAX_MESSAGES - ids.length)));
-    listUrl.searchParams.set("q", GMAIL_SYNC_QUERY);
+    listUrl.searchParams.set("q", getGmailSyncQuery());
     if (pageToken) listUrl.searchParams.set("pageToken", pageToken);
 
     const response = await fetch(listUrl.toString(), {
@@ -3710,13 +3769,16 @@ function buildGmailDigest(messages = []) {
   const subscriptions = buildSubscriptionViews(messages);
   const bills = buildBillViews(messages);
   const logins = buildLoginViews(messages);
+  const starred = buildStarredViews(messages);
   const inboxItems = buildInboxItems(unread.filter((message) => !isLoginConfirmationMessage(message)));
   const calendar = buildCalendarViews(events, messages);
   const security = buildSecurityItems(messages);
 
   return {
     generatedAt: new Date().toISOString(),
-    query: GMAIL_SYNC_QUERY,
+    lookbackDays: getEmailLookbackDays(),
+    lookbackLabel: getEmailLookbackLabel(),
+    query: getGmailSyncQuery(),
     scannedCount: messages.length,
     unreadCount: unread.length,
     messages,
@@ -3731,6 +3793,7 @@ function buildGmailDigest(messages = []) {
         ...logins,
       },
       security,
+      starred,
       subscriptions,
       today: {
         events,
@@ -3755,8 +3818,9 @@ function applyGmailDigest(digest) {
   const today = sections.today || {};
   const events = today.events || [];
   const meetings = today.meetings || [];
+  const lookbackLabel = digest.lookbackLabel || getEmailLookbackLabel();
 
-  pages.today.subtitle = "Latest week from Gmail";
+  pages.today.subtitle = `${lookbackLabel} from Gmail`;
   pages.today.metric = String(digest.unreadCount || 0);
   pages.today.tabViews = [
     { summary: today.summary || [] },
@@ -3780,7 +3844,7 @@ function applyGmailDigest(digest) {
   ];
 
   const bills = sections.bills || {};
-  pages.bills.subtitle = "Latest week from Gmail";
+  pages.bills.subtitle = `${lookbackLabel} from Gmail`;
   pages.bills.tabViews = [
     { items: bills.recurring || [] },
     { items: bills.oneTime || [] },
@@ -3790,7 +3854,7 @@ function applyGmailDigest(digest) {
 
   const subscriptions = sections.subscriptions || {};
   pages.subscriptions.metric = String(subscriptions.total || 0);
-  pages.subscriptions.subtitle = "Latest week from Gmail";
+  pages.subscriptions.subtitle = `${lookbackLabel} from Gmail`;
   pages.subscriptions.tabViews = [
     { items: subscriptions.promos || [] },
     { items: subscriptions.newsletter || [] },
@@ -3801,12 +3865,12 @@ function applyGmailDigest(digest) {
 
   const inbox = sections.inbox || {};
   pages.inbox.metric = String(inbox.count || 0);
-  pages.inbox.subtitle = "Unread mail from the latest week";
+  pages.inbox.subtitle = `Unread mail from ${lookbackLabel}`;
   pages.inbox.items = inbox.items || [];
 
   const logins = sections.logins || {};
   pages.logins.metric = String(logins.count || 0);
-  pages.logins.subtitle = "Latest week from Gmail";
+  pages.logins.subtitle = `${lookbackLabel} from Gmail`;
   pages.logins.tabViews = [
     { items: logins.newDevice || [] },
     { items: logins.signIn || [] },
@@ -3816,7 +3880,7 @@ function applyGmailDigest(digest) {
 
   const calendar = sections.calendar || {};
   pages.calendar.metric = calendar.nextTime || "0";
-  pages.calendar.subtitle = "Latest week from Gmail";
+  pages.calendar.subtitle = `${lookbackLabel} from Gmail`;
   pages.calendar.tabViews = [
     { timeline: calendar.appointments || [] },
     { timeline: calendar.travel || [] },
@@ -3827,6 +3891,12 @@ function applyGmailDigest(digest) {
   pages.security.metric = String(security.riskScore || 12);
   pages.security.subtitle = security.items?.length ? "Suspicious mail from Gmail" : "No obvious suspicious mail";
   pages.security.items = security.items || [];
+
+  const starred = sections.starred || {};
+  pages.starred.metric = String(starred.total || 0);
+  pages.starred.subtitle = `${lookbackLabel} from Gmail`;
+  pages.starred.tabViews = [{ items: starred.items || [] }];
+  pages.starred.items = pages.starred.tabViews[0].items;
 
   bookmarkInboxItems = (digest.messages || []).slice(0, 8).map((message) => ({
     sender: message.senderName || message.senderEmail || "Gmail",
@@ -3924,6 +3994,22 @@ function buildInboxItems(messages) {
   ]);
 }
 
+function buildStarredViews(messages) {
+  const items = messages.filter(isStarredMessage).slice(0, 30).map((message) => [
+    "star",
+    message.subject || "(no subject)",
+    message.senderEmail || message.senderName || "Unknown sender",
+    "",
+    "#efbd38",
+    createMailItemMeta(message),
+  ]);
+
+  return {
+    items,
+    total: items.length,
+  };
+}
+
 function buildLoginViews(messages) {
   const groups = {
     newDevice: [],
@@ -3979,6 +4065,10 @@ function buildSecurityItems(messages) {
     ]),
     riskScore: suspicious.length ? Math.min(94, 50 + suspicious.length * 12) : 12,
   };
+}
+
+function isStarredMessage(message) {
+  return (message.labelIds || []).includes("STARRED");
 }
 
 function messageText(message) {
