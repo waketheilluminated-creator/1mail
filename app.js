@@ -83,16 +83,6 @@ const modules = [
     wheelDescription: "Meeting reminders and travel bookings",
   },
   {
-    id: "starred",
-    label: "Starred",
-    icon: "star",
-    accent: "#efbd38",
-    wheelColor: "#755f31",
-    activeWheelColor: "#92763d",
-    iconColor: "#f4c44c",
-    wheelDescription: "Important mail you marked",
-  },
-  {
     id: "security",
     label: "Security",
     icon: "shield",
@@ -111,6 +101,16 @@ const modules = [
     activeWheelColor: "#9a6d43",
     iconColor: "#e5b36e",
     wheelDescription: "New device sign-ins and login confirmations",
+  },
+  {
+    id: "starred",
+    label: "Starred",
+    icon: "star",
+    accent: "#efbd38",
+    wheelColor: "#755f31",
+    activeWheelColor: "#92763d",
+    iconColor: "#f4c44c",
+    wheelDescription: "Important mail you marked",
   },
   {
     id: "subscriptions",
@@ -855,6 +855,17 @@ function renderHome() {
       </header>
 
       <div class="hub-stage" id="hubStage">
+        <div class="idle-vortex" aria-hidden="true">
+          <svg class="idle-vortex-art" viewBox="0 0 320 480" focusable="false">
+            <circle class="vortex-core" cx="162" cy="252" r="58"></circle>
+            <path class="vortex-ring outer" d="M75 274 C86 214 140 178 203 194 C255 207 280 254 266 303 C251 357 192 386 134 369 C89 356 64 322 75 274Z"></path>
+            <path class="vortex-ring inner" d="M105 269 C113 232 146 213 187 221 C224 228 244 258 236 294 C228 330 193 349 155 342 C119 335 96 307 105 269Z"></path>
+            <path class="vortex-crescent" d="M77 304 C116 240 168 226 217 248 C254 266 267 302 247 335 C224 373 169 385 123 356"></path>
+            <path class="vortex-blade glow" d="M170 452 C154 358 154 292 166 226 C177 160 187 94 207 24"></path>
+            <path class="vortex-blade core" d="M169 452 C155 358 156 292 168 226 C179 160 188 94 207 24"></path>
+            <path class="vortex-spark" d="M181 430 C172 376 173 306 182 244 C190 186 199 118 211 50"></path>
+          </svg>
+        </div>
         <div class="wheel-ring" id="wheelRing">
           ${renderWheelSurface(sliceAngle, homeModules)}
           <div class="unlock-line" id="unlockLine" aria-hidden="true"></div>
@@ -1455,6 +1466,7 @@ function getCenterLabelSize(label) {
   if (length > 12) return "10px";
   if (length > 9) return "12px";
   if (length > 7) return "15.5px";
+  if (length > 6) return "16px";
   return "19px";
 }
 
