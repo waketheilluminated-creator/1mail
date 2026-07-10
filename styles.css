@@ -133,6 +133,10 @@ button {
 }
 
 .home-view {
+  --idle-media-tilt: 0deg;
+  --idle-media-scale: 0.86;
+  --idle-media-x: 0px;
+  --idle-media-y: 0px;
   padding: max(30px, env(safe-area-inset-top)) 24px 0;
   overflow: hidden;
   background:
@@ -333,124 +337,41 @@ p {
 
 .idle-vortex {
   position: absolute;
-  left: 50%;
-  top: 50%;
+  inset: -10%;
   z-index: 0;
-  width: min(340px, 86vw);
-  height: min(520px, 66vh);
+  width: auto;
+  height: auto;
+  overflow: hidden;
   pointer-events: none;
-  transform: translate(-50%, -50%) rotate(5deg);
+  transform: translate(var(--idle-media-x), var(--idle-media-y)) rotate(var(--idle-media-tilt)) scale(var(--idle-media-scale));
   transform-origin: 50% 50%;
-  opacity: 0.78;
-  mix-blend-mode: screen;
+  opacity: 0.82;
+  background: #020207;
   filter:
-    drop-shadow(0 0 18px rgba(215, 205, 255, 0.18))
-    drop-shadow(0 0 38px rgba(142, 120, 255, 0.08));
+    saturate(1.08)
+    contrast(1.06)
+    drop-shadow(0 0 28px rgba(244, 191, 69, 0.1));
   transition: opacity 260ms ease, transform 260ms ease, filter 260ms ease;
-  animation: vortex-breathe 7200ms ease-in-out infinite;
+  will-change: opacity, transform;
+  contain: paint;
 }
 
 .home-view .hub-stage.is-wheel-expanded .idle-vortex {
-  opacity: 0.2;
-  transform: translate(-50%, -50%) rotate(5deg) scale(0.94);
-  filter: drop-shadow(0 0 18px rgba(215, 205, 255, 0.08));
+  opacity: 0.22;
+  transform: translate(var(--idle-media-x), var(--idle-media-y)) rotate(var(--idle-media-tilt)) scale(var(--idle-media-scale));
+  filter:
+    saturate(1.05)
+    contrast(0.98)
+    drop-shadow(0 0 18px rgba(244, 191, 69, 0.08));
 }
 
-.idle-vortex-art {
+.idle-media-video {
   display: block;
   width: 100%;
   height: 100%;
-  overflow: visible;
-}
-
-.vortex-core {
-  fill: rgba(4, 3, 11, 0.78);
-  stroke: rgba(238, 230, 255, 0.66);
-  stroke-width: 1.2;
-  filter:
-    drop-shadow(0 0 10px rgba(234, 226, 255, 0.34))
-    drop-shadow(0 0 38px rgba(132, 108, 255, 0.22));
-  transform-origin: 162px 252px;
-  animation: vortex-core-pulse 5200ms ease-in-out infinite;
-}
-
-.vortex-ring,
-.vortex-crescent,
-.vortex-blade,
-.vortex-spark {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.vortex-ring {
-  stroke: rgba(241, 235, 255, 0.72);
-  filter:
-    drop-shadow(0 0 8px rgba(246, 242, 255, 0.58))
-    drop-shadow(0 0 24px rgba(157, 135, 255, 0.28));
-  transform-origin: 162px 252px;
-  animation: vortex-ring-drift 9200ms ease-in-out infinite;
-}
-
-.vortex-ring.outer {
-  stroke-width: 8.5;
-  stroke-dasharray: 260 42 120 26;
-  opacity: 0.72;
-}
-
-.vortex-ring.inner {
-  stroke-width: 1.6;
-  stroke-dasharray: 190 36;
-  opacity: 0.7;
-  animation-duration: 11800ms;
-  animation-direction: reverse;
-}
-
-.vortex-crescent {
-  stroke: rgba(255, 252, 255, 0.86);
-  stroke-width: 14;
-  stroke-dasharray: 176 128;
-  opacity: 0.72;
-  filter:
-    drop-shadow(0 0 11px rgba(255, 255, 255, 0.6))
-    drop-shadow(0 0 32px rgba(161, 142, 255, 0.28));
-  animation: vortex-flow 6400ms ease-in-out infinite;
-}
-
-.vortex-blade {
-  transform-origin: 168px 252px;
-}
-
-.vortex-blade.glow {
-  stroke: rgba(235, 229, 255, 0.58);
-  stroke-width: 23;
-  stroke-dasharray: 470 70;
-  opacity: 0.58;
-  filter:
-    drop-shadow(0 0 12px rgba(255, 255, 255, 0.58))
-    drop-shadow(0 0 34px rgba(154, 136, 255, 0.38));
-  animation: vortex-blade-flow 7000ms ease-in-out infinite;
-}
-
-.vortex-blade.core {
-  stroke: rgba(255, 255, 255, 0.92);
-  stroke-width: 5.2;
-  stroke-dasharray: 390 58 46 32;
-  opacity: 0.86;
-  filter:
-    drop-shadow(0 0 8px rgba(255, 255, 255, 0.86))
-    drop-shadow(0 0 28px rgba(166, 148, 255, 0.5));
-  animation: vortex-blade-flow 5600ms ease-in-out infinite reverse;
-}
-
-.vortex-spark {
-  stroke: rgba(255, 255, 255, 0.72);
-  stroke-width: 1.4;
-  stroke-dasharray: 12 42 4 28;
-  opacity: 0.58;
-  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.7));
-  animation: vortex-spark-flow 4200ms linear infinite;
+  object-fit: cover;
+  object-position: center;
+  opacity: 0.96;
 }
 
 .wheel-ring {
@@ -3245,89 +3166,9 @@ p {
   display: none;
 }
 
-@keyframes vortex-breathe {
-  0%,
-  100% {
-    opacity: 0.58;
-    transform: translate(-50%, -50%) rotate(3deg) scale(0.97);
-  }
-
-  48% {
-    opacity: 0.86;
-    transform: translate(-50%, -50%) rotate(6deg) scale(1.02);
-  }
-}
-
-@keyframes vortex-core-pulse {
-  0%,
-  100% {
-    opacity: 0.7;
-    transform: scale(0.98);
-  }
-
-  50% {
-    opacity: 0.92;
-    transform: scale(1.03);
-  }
-}
-
-@keyframes vortex-ring-drift {
-  0%,
-  100% {
-    stroke-dashoffset: 0;
-    transform: rotate(-2deg) scale(0.98);
-  }
-
-  50% {
-    stroke-dashoffset: -74;
-    transform: rotate(4deg) scale(1.02);
-  }
-}
-
-@keyframes vortex-flow {
-  0%,
-  100% {
-    stroke-dashoffset: 0;
-    opacity: 0.56;
-  }
-
-  45% {
-    stroke-dashoffset: -122;
-    opacity: 0.86;
-  }
-}
-
-@keyframes vortex-blade-flow {
-  0%,
-  100% {
-    stroke-dashoffset: 0;
-    transform: rotate(-1.2deg);
-  }
-
-  50% {
-    stroke-dashoffset: -92;
-    transform: rotate(1.3deg);
-  }
-}
-
-@keyframes vortex-spark-flow {
-  to {
-    stroke-dashoffset: -86;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .idle-vortex,
-  .vortex-core,
-  .vortex-ring,
-  .vortex-crescent,
-  .vortex-blade,
-  .vortex-spark {
-    animation: none !important;
-  }
-
   .idle-vortex {
-    opacity: 0.52;
+    opacity: 0.18;
   }
 }
 

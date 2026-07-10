@@ -469,6 +469,7 @@ const GMAIL_BODY_TEXT_LIMIT = 50000;
 let route = "home";
 let dragState = null;
 let centerPressState = null;
+let idleVideoCleanup = null;
 let suppressCenterClick = false;
 const activePageTabs = {};
 const SUBSCRIPTION_UNSUBSCRIBED_STORAGE_KEY = "oneMailUnsubscribedSenders";
@@ -808,6 +809,7 @@ const makeItemDetails = {
 };
 
 function render() {
+  if (route !== "home") cleanupIdleBackgroundVideo();
   if (route === "home") {
     renderHome();
     showUserAgreementIfNeeded();
@@ -855,16 +857,10 @@ function renderHome() {
       </header>
 
       <div class="hub-stage" id="hubStage">
-        <div class="idle-vortex" aria-hidden="true">
-          <svg class="idle-vortex-art" viewBox="0 0 320 480" focusable="false">
-            <circle class="vortex-core" cx="162" cy="252" r="58"></circle>
-            <path class="vortex-ring outer" d="M75 274 C86 214 140 178 203 194 C255 207 280 254 266 303 C251 357 192 386 134 369 C89 356 64 322 75 274Z"></path>
-            <path class="vortex-ring inner" d="M105 269 C113 232 146 213 187 221 C224 228 244 258 236 294 C228 330 193 349 155 342 C119 335 96 307 105 269Z"></path>
-            <path class="vortex-crescent" d="M77 304 C116 240 168 226 217 248 C254 266 267 302 247 335 C224 373 169 385 123 356"></path>
-            <path class="vortex-blade glow" d="M170 452 C154 358 154 292 166 226 C177 160 187 94 207 24"></path>
-            <path class="vortex-blade core" d="M169 452 C155 358 156 292 168 226 C179 160 188 94 207 24"></path>
-            <path class="vortex-spark" d="M181 430 C172 376 173 306 182 244 C190 186 199 118 211 50"></path>
-          </svg>
+        <div class="idle-vortex idle-media-layer" aria-hidden="true">
+          <video class="idle-media-video" autoplay muted loop playsinline preload="metadata">
+            <source src="./assets/mainpage-bh-animation.mp4" type="video/mp4" />
+          </video>
         </div>
         <div class="wheel-ring" id="wheelRing">
           ${renderWheelSurface(sliceAngle, homeModules)}
@@ -902,7 +898,9 @@ function renderHome() {
   const stage = document.querySelector("#hubStage");
   const line = document.querySelector("#unlockLine");
   const wheelRing = document.querySelector("#wheelRing");
+  const idleVideo = document.querySelector(".idle-media-video");
   setupInboxBookmark();
+  setupIdleBackgroundVideo(idleVideo);
 
   center.addEventListener("pointerdown", (event) => startCenterPress(event, center, stage, line));
   center.addEventListener("click", () => {
@@ -982,6 +980,36 @@ function renderHome() {
 
 function isHomeWheelExpanded() {
   return Boolean(document.querySelector("#hubStage")?.classList.contains("is-wheel-expanded"));
+}
+
+function setupIdleBackgroundVideo(video) {
+  cleanupIdleBackgroundVideo();
+  if (!video) return;
+
+  const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const syncPlayback = () => {
+    if (document.hidden || motionQuery.matches) {
+      video.pause();
+      return;
+    }
+    video.play().catch(() => {
+      video.pause();
+    });
+  };
+
+  document.addEventListener("visibilitychange", syncPlayback);
+  motionQuery.addEventListener?.("change", syncPlayback);
+  idleVideoCleanup = () => {
+    document.removeEventListener("visibilitychange", syncPlayback);
+    motionQuery.removeEventListener?.("change", syncPlayback);
+  };
+  syncPlayback();
+}
+
+function cleanupIdleBackgroundVideo() {
+  if (!idleVideoCleanup) return;
+  idleVideoCleanup();
+  idleVideoCleanup = null;
 }
 
 function renderInboxBookmark() {
