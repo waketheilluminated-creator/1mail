@@ -373,7 +373,7 @@ p {
 .home-view .wheel-ring::after {
   content: "";
   position: absolute;
-  inset: 58px;
+  inset: 70px;
   z-index: 2;
   border-radius: 50%;
   background:
@@ -519,7 +519,7 @@ p {
   width: 48px;
   height: 48px;
   opacity: 0;
-  transform: translate(-50%, -50%) rotate(var(--angle)) translateY(-104px);
+  transform: translate(-50%, -50%) rotate(var(--angle)) translateY(-96px);
   pointer-events: none;
   transition: opacity 220ms ease;
 }
@@ -1030,6 +1030,58 @@ p {
 
 .settings-page {
   gap: 14px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 13% 7%, rgba(120, 82, 34, 0.3), transparent 28%),
+    radial-gradient(circle at 48% 48%, rgba(78, 48, 150, 0.22), transparent 39%),
+    linear-gradient(180deg, #060511 0%, #060510 54%, #04030a 100%);
+  color: #f9edc8;
+  font-family: Rajdhani, "Arial Narrow", "Avenir Next Condensed", ui-sans-serif, system-ui, sans-serif;
+}
+
+.settings-page .page-header {
+  align-items: flex-start;
+}
+
+.settings-page .icon-button {
+  flex: 0 0 auto;
+  width: 43px;
+  height: 43px;
+  border: 1px solid rgba(239, 189, 56, 0.22);
+  background: rgba(17, 14, 31, 0.76);
+  color: #f9d66f;
+  box-shadow: inset 0 0 0 1px rgba(255, 241, 199, 0.03);
+}
+
+.settings-page .icon-button .icon {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.25;
+}
+
+.settings-page .eyebrow {
+  color: rgba(204, 197, 211, 0.6);
+  font-family: Rajdhani, ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.settings-page .page-title {
+  color: #efbd38;
+  font-family: Orbitron, Rajdhani, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(24px, 6.8vw, 30px);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-page .page-subtitle {
+  max-width: 270px;
+  color: #a9a5b3;
+  font-size: clamp(12px, 3.3vw, 14px);
+  font-weight: 500;
+  line-height: 1.28;
 }
 
 .settings-summary {
@@ -1039,9 +1091,12 @@ p {
   align-items: center;
   min-height: 66px;
   padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(239, 189, 56, 0.18);
+  border-radius: 14px;
+  background: rgba(25, 24, 35, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 14px 34px rgba(0, 0, 0, 0.18);
 }
 
 .settings-avatar {
@@ -1050,8 +1105,8 @@ p {
   height: 46px;
   place-items: center;
   border-radius: 50%;
-  background: var(--ink);
-  color: #ffffff;
+  background: rgba(239, 189, 56, 0.13);
+  color: #efbd38;
 }
 
 .settings-summary > span:last-child {
@@ -1068,12 +1123,15 @@ p {
 }
 
 .settings-summary strong {
+  color: #ffffff;
   font-size: 16px;
+  font-weight: 900;
 }
 
 .settings-summary span span {
-  color: var(--muted);
+  color: rgba(204, 197, 211, 0.78);
   font-size: 12px;
+  font-weight: 600;
 }
 
 .settings-scroll {
@@ -1090,9 +1148,12 @@ p {
   gap: 11px;
   align-items: center;
   padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(239, 189, 56, 0.18);
+  border-radius: 14px;
+  background: rgba(25, 24, 35, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 14px 34px rgba(0, 0, 0, 0.18);
 }
 
 .gmail-connect-icon {
@@ -1101,8 +1162,8 @@ p {
   height: 42px;
   place-items: center;
   border-radius: 50%;
-  background: rgba(23, 23, 23, 0.06);
-  color: var(--ink);
+  background: rgba(239, 189, 56, 0.13);
+  color: #efbd38;
 }
 
 .gmail-connect-copy {
@@ -1112,47 +1173,50 @@ p {
 }
 
 .gmail-connect-copy strong {
+  color: #ffffff;
   font-size: 14px;
+  font-weight: 900;
 }
 
 .gmail-connect-copy span,
 .gmail-connect-copy em {
   overflow-wrap: anywhere;
-  color: var(--muted);
+  color: rgba(204, 197, 211, 0.78);
   font-size: 11px;
   font-style: normal;
+  font-weight: 560;
   line-height: 1.34;
 }
 
 .gmail-connect-copy em {
-  color: var(--green);
-  font-weight: 740;
+  color: #22c88b;
+  font-weight: 800;
 }
 
 .gmail-connect-button {
   grid-column: 1 / -1;
   min-height: 42px;
-  border-radius: 8px;
-  background: var(--ink);
-  color: #ffffff;
+  border-radius: 999px;
+  background: #efbd38;
+  color: #05040c;
   font-size: 13px;
-  font-weight: 780;
+  font-weight: 900;
 }
 
 .gmail-connect-button:disabled {
-  background: rgba(23, 23, 23, 0.08);
-  color: var(--muted);
+  background: rgba(239, 189, 56, 0.18);
+  color: rgba(249, 237, 200, 0.46);
 }
 
 .gmail-process-button {
   grid-column: 1 / -1;
   min-height: 40px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.84);
-  color: var(--ink);
+  border: 1px solid rgba(239, 189, 56, 0.22);
+  border-radius: 999px;
+  background: rgba(17, 14, 31, 0.76);
+  color: #f9d66f;
   font-size: 13px;
-  font-weight: 780;
+  font-weight: 900;
 }
 
 .settings-group {
@@ -1161,19 +1225,23 @@ p {
 }
 
 .settings-group h2 {
-  color: var(--muted);
+  color: #efbd38;
+  font-family: Orbitron, Rajdhani, ui-sans-serif, system-ui, sans-serif;
   font-size: 12px;
-  font-weight: 780;
-  letter-spacing: 0;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .settings-list {
   display: grid;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(239, 189, 56, 0.18);
+  border-radius: 14px;
+  background: rgba(25, 24, 35, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 14px 34px rgba(0, 0, 0, 0.18);
 }
 
 .settings-row {
@@ -1185,10 +1253,20 @@ p {
   padding: 10px;
   background: transparent;
   text-align: left;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.settings-row:active {
+  transform: scale(0.99);
+}
+
+.settings-row:hover,
+.settings-row:focus-visible {
+  background: rgba(239, 189, 56, 0.055);
 }
 
 .settings-row + .settings-row {
-  border-top: 1px solid rgba(223, 222, 215, 0.78);
+  border-top: 1px solid rgba(239, 189, 56, 0.13);
 }
 
 .settings-row-icon {
@@ -1197,8 +1275,8 @@ p {
   height: 36px;
   place-items: center;
   border-radius: 50%;
-  background: rgba(23, 23, 23, 0.06);
-  color: var(--ink);
+  background: rgba(239, 189, 56, 0.13);
+  color: #efbd38;
 }
 
 .settings-row-icon .icon {
@@ -1221,32 +1299,39 @@ p {
 }
 
 .settings-row-main strong {
+  color: #ffffff;
   font-size: 14px;
+  font-weight: 900;
 }
 
 .settings-row-main span {
-  color: var(--muted);
+  color: rgba(204, 197, 211, 0.78);
   font-size: 11px;
+  font-weight: 600;
 }
 
 .settings-row-status {
   max-width: 86px;
-  color: var(--muted);
+  color: #f1c247;
   font-size: 11px;
-  font-weight: 760;
+  font-weight: 900;
   text-align: right;
 }
 
 .feedback-card {
   padding: 13px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(239, 189, 56, 0.18);
+  border-radius: 14px;
+  background: rgba(25, 24, 35, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 14px 34px rgba(0, 0, 0, 0.18);
 }
 
 .feedback-card p {
-  color: var(--muted);
+  color: rgba(204, 197, 211, 0.78);
   font-size: 12px;
+  font-weight: 560;
   line-height: 1.38;
 }
 
@@ -1259,19 +1344,23 @@ p {
   width: 100%;
   min-height: 96px;
   resize: none;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid rgba(239, 189, 56, 0.18);
+  border-radius: 12px;
   padding: 11px 12px;
-  background: #ffffff;
-  color: var(--ink);
+  background: rgba(8, 7, 17, 0.74);
+  color: #f9edc8;
   font: inherit;
   font-size: 13px;
   line-height: 1.35;
   outline: 0;
 }
 
+.feedback-form textarea::placeholder {
+  color: rgba(204, 197, 211, 0.52);
+}
+
 .feedback-form textarea:focus {
-  border-color: rgba(23, 23, 23, 0.34);
+  border-color: rgba(239, 189, 56, 0.42);
 }
 
 .feedback-form button {
@@ -1280,17 +1369,176 @@ p {
   gap: 8px;
   align-items: center;
   min-height: 46px;
-  border-radius: 8px;
-  background: var(--ink);
-  color: #ffffff;
+  border-radius: 999px;
+  background: #efbd38;
+  color: #05040c;
   font-size: 13px;
-  font-weight: 760;
+  font-weight: 900;
 }
 
 .feedback-status {
   min-height: 17px;
-  color: var(--green) !important;
-  font-weight: 740;
+  color: #22c88b !important;
+  font-weight: 800;
+}
+
+.settings-detail-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  align-items: end;
+  padding: 18px clamp(16px, 5.2vw, 22px) max(22px, env(safe-area-inset-bottom));
+  background: rgba(5, 4, 12, 0.58);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.settings-detail-sheet {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  padding: 16px;
+  border: 1px solid rgba(239, 189, 56, 0.2);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(120, 82, 34, 0.25), transparent 42%),
+    rgba(19, 18, 30, 0.98);
+  box-shadow: 0 -18px 52px rgba(0, 0, 0, 0.42);
+  color: #f9edc8;
+}
+
+.settings-detail-header {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 38px;
+  gap: 11px;
+  align-items: center;
+}
+
+.settings-detail-header > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.settings-detail-header strong {
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-detail-header em {
+  overflow: hidden;
+  color: rgba(204, 197, 211, 0.78);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-detail-close {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid rgba(239, 189, 56, 0.2);
+  border-radius: 50%;
+  background: rgba(17, 14, 31, 0.82);
+  color: #f9d66f;
+}
+
+.settings-detail-close .icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.3;
+}
+
+.settings-detail-summary {
+  color: #bdb7c8;
+  font-size: 13px;
+  font-weight: 560;
+  line-height: 1.35;
+}
+
+.settings-detail-status {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 189, 56, 0.14);
+  border-radius: 12px;
+  background: rgba(8, 7, 17, 0.62);
+}
+
+.settings-detail-status span {
+  color: rgba(204, 197, 211, 0.7);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.settings-detail-status strong {
+  color: #f1c247;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.settings-detail-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-detail-control {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  border: 1px solid rgba(239, 189, 56, 0.13);
+  border-radius: 12px;
+  background: rgba(8, 7, 17, 0.54);
+  color: #d9d1dc;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.settings-detail-control.is-active {
+  border-color: rgba(239, 189, 56, 0.34);
+  background: rgba(239, 189, 56, 0.12);
+  color: #ffffff;
+}
+
+.settings-control-dot {
+  display: block;
+  width: 15px;
+  height: 15px;
+  border: 1px solid rgba(239, 189, 56, 0.42);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.settings-detail-control.is-active .settings-control-dot {
+  border-color: #efbd38;
+  background: #efbd38;
+  box-shadow: 0 0 18px rgba(239, 189, 56, 0.28);
+}
+
+.settings-detail-primary {
+  min-height: 48px;
+  border-radius: 999px;
+  background: #efbd38;
+  color: #05040c;
+  font-size: 14px;
+  font-weight: 900;
 }
 
 .ai-page {
@@ -2075,7 +2323,7 @@ p {
   max-width: 100%;
   color: #efbd38;
   font-family: Orbitron, Rajdhani, ui-sans-serif, system-ui, sans-serif;
-  font-size: clamp(36px, 9.7vw, 44px);
+  font-size: clamp(20px, 5.5vw, 24px);
   font-weight: 600;
   line-height: 1.42;
   letter-spacing: 0.11em;
@@ -2084,12 +2332,12 @@ p {
 }
 
 .make-section-subscriptions .make-section-hero h1 {
-  font-size: clamp(31px, 8.4vw, 38px);
+  font-size: clamp(18px, 4.85vw, 22px);
 }
 
 .make-section-hero p {
   color: #a9a5b3;
-  font-size: clamp(18px, 4.9vw, 21px);
+  font-size: clamp(9.5px, 2.55vw, 11px);
   font-weight: 500;
   line-height: 1.25;
 }
@@ -2099,7 +2347,7 @@ p {
   margin-top: clamp(12px, 2dvh, 18px);
   color: var(--metric-color, #22c88b);
   font-family: Orbitron, Rajdhani, ui-sans-serif, system-ui, sans-serif;
-  font-size: clamp(52px, 15vw, 68px);
+  font-size: clamp(29px, 8.45vw, 38px);
   font-weight: 500;
   line-height: 0.92;
   letter-spacing: -0.055em;
@@ -2124,7 +2372,7 @@ p {
   padding: 0 5px;
   background: transparent;
   color: rgba(204, 197, 211, 0.65);
-  font-size: clamp(18px, 4.8vw, 21px);
+  font-size: clamp(10px, 2.7vw, 11.5px);
   font-weight: 900;
   line-height: 1;
   white-space: nowrap;
@@ -2215,7 +2463,7 @@ p {
 .make-card-main strong {
   overflow: hidden;
   color: #ffffff;
-  font-size: clamp(23px, 6.05vw, 28px);
+  font-size: clamp(12px, 3.35vw, 15px);
   font-weight: 900;
   line-height: 1;
   letter-spacing: -0.02em;
@@ -2226,7 +2474,7 @@ p {
 .make-card-main span {
   overflow: hidden;
   color: rgba(204, 197, 211, 0.78);
-  font-size: clamp(17px, 4.6vw, 20px);
+  font-size: clamp(8.5px, 2.5vw, 11px);
   font-weight: 600;
   line-height: 1.1;
   text-overflow: ellipsis;
@@ -2238,7 +2486,7 @@ p {
 .make-delete-button {
   justify-self: end;
   color: #f1c247;
-  font-size: clamp(18px, 4.7vw, 22px);
+  font-size: clamp(10px, 2.7vw, 12px);
   font-weight: 900;
   line-height: 1;
   white-space: nowrap;
@@ -2246,7 +2494,7 @@ p {
 
 .make-card-amount {
   color: #ffffff;
-  font-size: clamp(24px, 6.3vw, 29px);
+  font-size: clamp(13.5px, 3.6vw, 16px);
 }
 
 .make-card-status {
@@ -2273,7 +2521,7 @@ p {
 
 .make-card-detail p {
   color: #e8e2ee;
-  font-size: clamp(15px, 4.1vw, 18px);
+  font-size: clamp(8.5px, 2.35vw, 10px);
   font-weight: 500;
   line-height: 1.42;
 }
@@ -2281,7 +2529,7 @@ p {
 .make-card-detail > span {
   color: #efbd38;
   font-family: Orbitron, Rajdhani, ui-sans-serif, system-ui, sans-serif;
-  font-size: clamp(11px, 3vw, 13px);
+  font-size: clamp(7px, 1.75vw, 8px);
   font-weight: 500;
   line-height: 1;
   letter-spacing: 0.36em;
@@ -2299,7 +2547,7 @@ p {
   border-radius: 999px;
   background: rgba(85, 63, 41, 0.5);
   color: #d9d1dc;
-  font-size: clamp(16px, 4.2vw, 19px);
+  font-size: clamp(8.5px, 2.4vw, 10px);
   font-style: normal;
   font-weight: 500;
   line-height: 1.15;
@@ -2316,7 +2564,7 @@ p {
   border-radius: 14px;
   background: rgba(25, 24, 35, 0.88);
   color: rgba(204, 197, 211, 0.78);
-  font-size: clamp(18px, 4.8vw, 21px);
+  font-size: clamp(9.5px, 2.55vw, 11px);
   font-weight: 650;
   line-height: 1.25;
 }
@@ -2365,7 +2613,7 @@ p {
 .make-unsub-modal h2 {
   color: #efbd38;
   font-family: Orbitron, Rajdhani, ui-sans-serif, system-ui, sans-serif;
-  font-size: clamp(24px, 6.3vw, 30px);
+  font-size: clamp(13.5px, 3.6vw, 16px);
   font-weight: 600;
   letter-spacing: 0.1em;
 }
@@ -2373,7 +2621,7 @@ p {
 .make-unsub-modal p {
   max-width: 270px;
   color: #bdb7c8;
-  font-size: clamp(17px, 4.55vw, 20px);
+  font-size: clamp(9.5px, 2.55vw, 11px);
   font-weight: 560;
   line-height: 1.28;
 }
@@ -2385,7 +2633,7 @@ p {
   border-radius: 999px;
   background: #efbd38;
   color: #05040c;
-  font-size: clamp(20px, 5.2vw, 24px);
+  font-size: clamp(11px, 2.95vw, 13px);
   font-weight: 900;
 }
 

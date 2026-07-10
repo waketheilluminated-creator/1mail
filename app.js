@@ -127,11 +127,11 @@ const homeModules = modules.filter((module) => module.id !== "today");
 const wheel = {
   size: 350,
   center: 175,
-  innerRadius: 60,
-  outerRadius: 170,
-  iconRadius: 122,
-  cornerRadius: 12,
-  segmentGapDegrees: 2.6,
+  innerRadius: 72,
+  outerRadius: 158,
+  iconRadius: 112,
+  cornerRadius: 11,
+  segmentGapDegrees: 8.2,
 };
 
 const pages = {
@@ -564,10 +564,7 @@ const settingsGroups = [
   {
     title: "Mail controls",
     items: [
-      ["sliders", "AI behavior", "Summary depth, tone, and suggestions", "Balanced"],
       ["archive", "Labels and filters", "Auto labels, saved rules, undo window", "On"],
-      ["trash", "Delete safety", "Trash first, never permanent by default", "Protected"],
-      ["ban", "Unsubscribe rules", "One-click, web links, and block list", "Ask first"],
     ],
   },
   {
@@ -585,6 +582,57 @@ const settingsGroups = [
     ],
   },
 ];
+
+const settingsOptionDetails = {
+  "User information": {
+    summary: "Review the identity 1Mail uses for mailbox context, timezone, and account-level display.",
+    statusLabel: "Profile owner",
+    controls: ["Display name", "Primary email", "Timezone"],
+    action: "Review info",
+  },
+  Profile: {
+    summary: "Choose the default writing identity, signature style, and how formal 1Mail should sound when helping draft replies.",
+    statusLabel: "Default profile",
+    controls: ["Personal identity", "Reply signature", "Tone preference"],
+    action: "Edit profile",
+  },
+  "Connected mailboxes": {
+    summary: "Manage Gmail and Outlook access. Connected accounts can be processed for summaries, classifications, and requested actions.",
+    statusLabel: "Mailbox access",
+    controls: ["Gmail", "Outlook", "Latest-week sync"],
+    action: "Manage access",
+  },
+  "Labels and filters": {
+    summary: "Control automatic labels, saved rules, and how long 1Mail keeps an undo window after organizing messages.",
+    statusLabel: "Automation",
+    controls: ["Auto labels", "Saved rules", "Undo window"],
+    action: "Edit rules",
+  },
+  "Saved items": {
+    summary: "Pinned emails, receipts, trips, and notes live here so useful mailbox context does not disappear into the inbox flow.",
+    statusLabel: "Saved space",
+    controls: ["Pinned receipts", "Trips", "Notes"],
+    action: "View saved",
+  },
+  "Calendar and reminders": {
+    summary: "Manage appointment, travel, bill, and meeting reminders created from email text and calendar invite signals.",
+    statusLabel: "Reminder sync",
+    controls: ["Apple Calendar", "Travel reminders", "Bill reminders"],
+    action: "Manage reminders",
+  },
+  "Privacy and security": {
+    summary: "Review data retention, redaction behavior, action history, phishing protection, and attachment handling.",
+    statusLabel: "Privacy posture",
+    controls: ["Text-only parsing", "Attachment names only", "Phishing guard"],
+    action: "Review privacy",
+  },
+  "Billing and subscription": {
+    summary: "Manage the 1Mail plan, invoices, payment method, and usage limits for AI-powered mailbox parsing.",
+    statusLabel: "Current plan",
+    controls: ["1Mail Plus", "Invoices", "Payment method"],
+    action: "Manage plan",
+  },
+};
 
 let nextAiActionId = 1;
 const pendingAiActions = {};
@@ -825,19 +873,29 @@ function renderHome() {
   });
 
   document.querySelectorAll("[data-module]").forEach((node) => {
-    node.addEventListener("pointerenter", () => setWheelFocus(node.dataset.module, "hover"));
+    node.addEventListener("pointerenter", () => {
+      if (isHomeWheelExpanded()) setWheelFocus(node.dataset.module, "hover");
+    });
     node.addEventListener("pointerleave", () => {
       if (!dragState) setWheelFocus(null);
     });
-    node.addEventListener("focus", () => setWheelFocus(node.dataset.module, "hover"));
+    node.addEventListener("focus", () => {
+      if (isHomeWheelExpanded()) setWheelFocus(node.dataset.module, "hover");
+    });
     node.addEventListener("blur", () => {
       if (!dragState) setWheelFocus(null);
     });
-    node.addEventListener("click", () => openRoute(node.dataset.module));
+    node.addEventListener("click", () => {
+      if (isHomeWheelExpanded()) openRoute(node.dataset.module);
+    });
   });
 
   wheelRing.addEventListener("pointermove", (event) => {
     if (dragState) return;
+    if (!isHomeWheelExpanded()) {
+      setWheelFocus(null);
+      return;
+    }
     const module = getModuleFromPoint(event.clientX, event.clientY);
     setWheelFocus(module?.id || null, module ? "hover" : "idle");
   });
@@ -846,17 +904,21 @@ function renderHome() {
   });
   wheelRing.addEventListener("click", (event) => {
     if (event.target.closest("#centerControl, .module-node")) return;
+    if (!isHomeWheelExpanded()) return;
     const module = getModuleFromPoint(event.clientX, event.clientY);
     if (module) openRoute(module.id);
   });
 
   document.querySelectorAll("[data-wheel-module]").forEach((segment) => {
-    segment.addEventListener("pointerenter", () => setWheelFocus(segment.dataset.wheelModule, "hover"));
+    segment.addEventListener("pointerenter", () => {
+      if (isHomeWheelExpanded()) setWheelFocus(segment.dataset.wheelModule, "hover");
+    });
     segment.addEventListener("pointerleave", () => {
       if (!dragState) setWheelFocus(null);
     });
     segment.addEventListener("click", (event) => {
       event.stopPropagation();
+      if (!isHomeWheelExpanded()) return;
       openRoute(segment.dataset.wheelModule);
     });
   });
@@ -865,6 +927,10 @@ function renderHome() {
     button.addEventListener("click", () => openRoute(button.dataset.open));
   });
   fitOneLineText();
+}
+
+function isHomeWheelExpanded() {
+  return Boolean(document.querySelector("#hubStage")?.classList.contains("is-wheel-expanded"));
 }
 
 function renderInboxBookmark() {
@@ -1421,7 +1487,12 @@ function renderSettingsPage() {
                   ${group.items
                     .map(
                       ([icon, title, subtitle, status]) => `
-                        <button class="settings-row" type="button">
+                        <button
+                          class="settings-row"
+                          type="button"
+                          data-setting-option="${escapeAttribute(title)}"
+                          aria-label="Open ${escapeAttribute(title)} settings"
+                        >
                           <span class="settings-row-icon">${icons[icon]}</span>
                           <span class="settings-row-main">
                             <strong>${title}</strong>
@@ -1461,6 +1532,9 @@ function renderSettingsPage() {
   if (gmailProcessButton) {
     gmailProcessButton.addEventListener("click", () => processLatestWeekGmail({ silent: false }));
   }
+  document.querySelectorAll("[data-setting-option]").forEach((button) => {
+    button.addEventListener("click", () => openSettingsOption(button.dataset.settingOption));
+  });
   document.querySelector(".feedback-form").addEventListener("submit", (event) => {
     event.preventDefault();
     const input = document.querySelector("#feedbackInput");
@@ -1471,6 +1545,69 @@ function renderSettingsPage() {
     }
     input.value = "";
     status.textContent = "Sent. Thank you. This is exactly how 1Mail gets kinder.";
+  });
+}
+
+function openSettingsOption(title = "") {
+  const detail = settingsOptionDetails[title] || {
+    summary: "This setting is ready for prototype review.",
+    statusLabel: "Current setting",
+    controls: ["Enabled", "Ask before changing", "Keep history"],
+    action: "Done",
+  };
+  const row = settingsGroups.flatMap((group) => group.items).find((item) => item[1] === title) || [];
+  const [icon = "settings", itemTitle = title, subtitle = "", status = "On"] = row;
+  document.querySelector(".settings-detail-overlay")?.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "settings-detail-overlay";
+  overlay.innerHTML = `
+    <section class="settings-detail-sheet" role="dialog" aria-modal="true" aria-labelledby="settingsDetailTitle">
+      <header class="settings-detail-header">
+        <span class="settings-row-icon">${icons[icon] || icons.settings}</span>
+        <span>
+          <strong id="settingsDetailTitle">${escapeHtml(itemTitle)}</strong>
+          <em>${escapeHtml(subtitle)}</em>
+        </span>
+        <button class="settings-detail-close" type="button" data-settings-detail-close aria-label="Close">
+          ${icons.arrowLeft}
+        </button>
+      </header>
+      <p class="settings-detail-summary">${escapeHtml(detail.summary)}</p>
+      <div class="settings-detail-status">
+        <span>${escapeHtml(detail.statusLabel)}</span>
+        <strong>${escapeHtml(status)}</strong>
+      </div>
+      <div class="settings-detail-controls">
+        ${detail.controls
+          .map(
+            (control, index) => `
+              <button
+                class="settings-detail-control${index === 0 ? " is-active" : ""}"
+                type="button"
+                data-settings-control
+              >
+                <span>${escapeHtml(control)}</span>
+                <span class="settings-control-dot" aria-hidden="true"></span>
+              </button>
+            `,
+          )
+          .join("")}
+      </div>
+      <button class="settings-detail-primary" type="button" data-settings-detail-close>
+        ${escapeHtml(detail.action)}
+      </button>
+    </section>
+  `;
+  app.appendChild(overlay);
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay || event.target.closest("[data-settings-detail-close]")) {
+      overlay.remove();
+    }
+  });
+  overlay.querySelectorAll("[data-settings-control]").forEach((button) => {
+    button.addEventListener("click", () => {
+      button.classList.toggle("is-active");
+    });
   });
 }
 
@@ -1489,7 +1626,7 @@ function renderGmailConnectPanel() {
   const buttonLabel = profile ? "Reconnect Gmail" : "Connect Gmail";
   const aiConfig = getAiParserConfig();
   const aiCopy = isAiParserConfigured(aiConfig)
-    ? ` Cloud AI parser: ${aiConfig.endpoint}.`
+    ? ` Cloud AI parser: ${getAiParserEndpoint(aiConfig)}.`
     : " Cloud AI parser is off.";
   const detail = isConfigured
     ? `Uses Google OAuth with Gmail read/modify access for prototype testing.${aiCopy}`
@@ -3055,6 +3192,14 @@ function getAiParserConfig() {
   return window.ONE_MAIL_CONFIG?.aiParser || {};
 }
 
+function getAiParserEndpoint(config = getAiParserConfig()) {
+  const host = window.location.hostname;
+  if ((host === "localhost" || host === "127.0.0.1") && config.endpoint) {
+    return "http://localhost:8787/api/classify-emails";
+  }
+  return config.endpoint || "";
+}
+
 function isGmailConfigured(config = getGmailConfig()) {
   return Boolean(
     config.clientId &&
@@ -3065,7 +3210,11 @@ function isGmailConfigured(config = getGmailConfig()) {
 }
 
 function isAiParserConfigured(config = getAiParserConfig()) {
-  return Boolean(config.enabled && config.endpoint);
+  return Boolean(config.enabled && getAiParserEndpoint(config));
+}
+
+function isCapacitorRuntime() {
+  return Boolean(window.Capacitor?.Plugins?.Browser && window.Capacitor?.Plugins?.App);
 }
 
 function getStoredGmailProfile() {
@@ -3218,7 +3367,7 @@ async function enrichMessagesWithCloudAi(messages, { silent = false } = {}) {
   if (!candidates.length) return messages;
   if (!silent) setGmailConnectStatus(`Cloud AI is reading ${candidates.length} redacted email texts...`);
 
-  const response = await fetch(config.endpoint, {
+  const response = await fetch(getAiParserEndpoint(config), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -4847,6 +4996,11 @@ async function startGmailOAuth() {
     return;
   }
 
+  if (!isCapacitorRuntime()) {
+    await startGmailWebOAuth(config);
+    return;
+  }
+
   try {
     const state = createOAuthRandomString(24);
     const codeVerifier = createOAuthRandomString(64);
@@ -4879,6 +5033,74 @@ async function startGmailOAuth() {
   } catch (error) {
     setGmailConnectStatus(`Could not start Gmail sign-in: ${error.message}`);
   }
+}
+
+async function startGmailWebOAuth(config = getGmailConfig()) {
+  const webClientId = config.webClientId || config.browserClientId || "";
+  if (!webClientId || webClientId.includes("PASTE_WEB_CLIENT_ID")) {
+    setGmailConnectStatus(
+      "Local browser preview needs a Web OAuth client ID. Add it to oauth-config.js as gmail.webClientId.",
+    );
+    return;
+  }
+
+  try {
+    setGmailConnectStatus("Opening Google sign-in for browser testing...");
+    await loadGoogleIdentityServices();
+    const tokenResponse = await requestGoogleAccessToken(webClientId, (config.scopes || []).join(" "));
+    if (!tokenResponse?.access_token) {
+      throw new Error(tokenResponse?.error_description || tokenResponse?.error || "No access token returned");
+    }
+    const token = {
+      accessToken: tokenResponse.access_token,
+      expiresAt: Date.now() + Number(tokenResponse.expires_in || 3600) * 1000,
+      refreshToken: null,
+      scope: tokenResponse.scope || (config.scopes || []).join(" "),
+      tokenType: tokenResponse.token_type || "Bearer",
+    };
+    localStorage.setItem("oneMailGmailToken", JSON.stringify(token));
+    const profile = await fetchGmailProfile(token.accessToken);
+    localStorage.setItem("oneMailGmailProfile", JSON.stringify(profile));
+    setGmailConnectStatus(`Connected as ${profile.emailAddress}. Processing latest week...`);
+    await processLatestWeekGmail({ accessToken: token.accessToken, silent: false });
+  } catch (error) {
+    setGmailConnectStatus(`Gmail browser connection failed: ${error.message}`);
+  }
+}
+
+function loadGoogleIdentityServices() {
+  if (window.google?.accounts?.oauth2) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Could not load Google Identity Services")), {
+        once: true,
+      });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Could not load Google Identity Services"));
+    document.head.appendChild(script);
+  });
+}
+
+function requestGoogleAccessToken(clientId, scope) {
+  return new Promise((resolve) => {
+    const tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      prompt: "consent",
+      scope,
+      callback: resolve,
+      error_callback: resolve,
+    });
+    tokenClient.requestAccessToken();
+  });
 }
 
 function setupGmailOAuthRedirectListener() {
